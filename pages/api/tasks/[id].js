@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'PATCH') {
     try {
-      const { status, priority, archived, column } = req.body;
+      const { status, priority, archived, column, task, owner, person, dueDate, context, type } = req.body;
       
       // Get current tasks from KV
       let tasks = await kv.get('tasks') || [];
@@ -27,9 +27,15 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'Task not found' });
       }
       
-      // Update fields
+      // Update fields if provided
       if (status !== undefined) tasks[taskIndex].status = status;
       if (priority !== undefined) tasks[taskIndex].priority = priority;
+      if (task !== undefined) tasks[taskIndex].task = task;
+      if (owner !== undefined) tasks[taskIndex].owner = owner;
+      if (person !== undefined) tasks[taskIndex].person = person;
+      if (dueDate !== undefined) tasks[taskIndex].dueDate = dueDate;
+      if (context !== undefined) tasks[taskIndex].context = context;
+      if (type !== undefined) tasks[taskIndex].type = type;
       if (archived !== undefined) {
         tasks[taskIndex].archived = archived;
         if (archived) {
