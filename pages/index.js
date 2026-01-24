@@ -33,6 +33,7 @@ const typeIcons = {
 function TaskCard({ task, meeting, onDelete }) {
   const [isDragging, setIsDragging] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [expandContext, setExpandContext] = useState(false);
 
   const handleDragStart = (e) => {
     setIsDragging(true);
@@ -84,11 +85,18 @@ function TaskCard({ task, meeting, onDelete }) {
         </p>
       </div>
 
-      {/* Context */}
+      {/* Context - clickable to expand */}
       {task.context && (
-        <p className="text-xs text-slate-400 mb-2 ml-5 italic line-clamp-2">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpandContext(!expandContext);
+          }}
+          className={`text-xs text-slate-400 mb-2 ml-5 italic text-left w-full hover:text-slate-500 ${expandContext ? '' : 'line-clamp-2'}`}
+          title={expandContext ? 'Click to collapse' : 'Click to expand'}
+        >
           {task.context}
-        </p>
+        </button>
       )}
 
       {/* Owner / Assigned to */}
@@ -225,6 +233,14 @@ function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete }) {
 function PasteModal({ isOpen, onClose, onSubmit, isProcessing }) {
   const [title, setTitle] = useState('');
   const [transcript, setTranscript] = useState('');
+
+  // Clear form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setTitle('');
+      setTranscript('');
+    }
+  }, [isOpen]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
