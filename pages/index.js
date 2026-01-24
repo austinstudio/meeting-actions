@@ -30,6 +30,14 @@ const typeIcons = {
   'follow-up': <ArrowRight size={14} />,
 };
 
+// Current user configuration
+const CURRENT_USER = 'Corey';
+const isCurrentUser = (name) => {
+  if (!name) return false;
+  const normalized = name.toLowerCase().trim();
+  return normalized === 'me' || normalized === 'corey';
+};
+
 function TaskCard({ task, meeting, onDelete, onEdit }) {
   const [isDragging, setIsDragging] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -115,7 +123,7 @@ function TaskCard({ task, meeting, onDelete, onEdit }) {
       {/* Owner / Assigned to */}
       <div className="flex items-center gap-1.5 mb-2 ml-5">
         <User size={12} className="text-slate-400" />
-        <span className={`text-xs ${task.owner === 'Me' ? 'text-indigo-600 font-medium' : 'text-slate-500'}`}>
+        <span className={`text-xs ${isCurrentUser(task.owner) ? 'text-indigo-600 font-medium' : 'text-slate-500'}`}>
           {task.owner || 'Unassigned'}
         </span>
         {task.person && task.type === 'follow-up' && (
@@ -689,7 +697,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns }) {
 function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
   const [formData, setFormData] = useState({
     task: '',
-    owner: 'Me',
+    owner: CURRENT_USER,
     person: '',
     dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     priority: 'medium',
@@ -717,7 +725,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
     setIsSaving(false);
     setFormData({
       task: '',
-      owner: 'Me',
+      owner: CURRENT_USER,
       person: '',
       dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       priority: 'medium',
@@ -1197,7 +1205,7 @@ export default function MeetingKanban() {
     if (selectedMeeting && t.meetingId !== selectedMeeting) return false;
 
     // Type/owner filters
-    if (view === 'mine' && t.owner !== 'Me') return false;
+    if (view === 'mine' && !isCurrentUser(t.owner)) return false;
     if (view === 'follow-ups' && t.type !== 'follow-up') return false;
     if (view === 'actions' && t.type !== 'action') return false;
 
@@ -1225,7 +1233,7 @@ export default function MeetingKanban() {
 
   const stats = {
     total: tasks.filter(t => !t.archived).length,
-    mine: tasks.filter(t => t.owner === 'Me' && !t.archived).length,
+    mine: tasks.filter(t => isCurrentUser(t.owner) && !t.archived).length,
     overdue: tasks.filter(t => new Date(t.dueDate) < new Date() && t.status !== 'done' && !t.archived).length,
     archived: tasks.filter(t => t.archived).length,
   };
