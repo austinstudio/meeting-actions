@@ -1,9 +1,7 @@
 // pages/api/tasks/[id].js
-// Update individual task status
+// Update individual task status with KV persistence
 
-// Note: In production, this would connect to your database
-// For now, we're using the in-memory store from webhook.js
-// This is a limitation of the demo - you'd want a shared data layer
+import { kv } from '@vercel/kv';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,21 +15,51 @@ export default async function handler(req, res) {
   const { id } = req.query;
 
   if (req.method === 'PATCH') {
-    const { status, priority } = req.body;
-    
-    // In production: UPDATE tasks SET status = $1 WHERE id = $2
-    // For demo, this would need shared state management
-    
-    return res.status(200).json({ 
-      success: true, 
-      message: 'Task updated',
-      note: 'In demo mode - refresh to see actual data from webhook'
-    });
+    try {
+      const { status, priority } = req.body;
+      
+      // Get current tasks from KV
+      let tasks = await kv.get('tasks') || [];
+      
+      // Find and update the task
+      const taskIndex = tasks.findIndex(t => t.id === id);
+      if (taskIndex === -1) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
+      
+      // Update fields
+      if (status) tasks[taskIndex].status = status;
+      if (priority) tasks[taskIndex].priority = priority;
+      
+      // Save back to KV
+      await kv.set('tasks', tasks);
+      
+      return res.status(200).json({ 
+        success: true, 
+        task: tasks[taskIndex]
+      });
+    } catch (error) {
+      console.error('Task update error:', error);
+      return res.status(500).json({ error: 'Failed to update task' });
+    }
   }
 
   if (req.method === 'DELETE') {
-    // In production: DELETE FROM tasks WHERE id = $1
-    return res.status(200).json({ success: true, message: 'Task deleted' });
+    try {
+      // Get current tasks from KV
+      let tasks = await kv.get('tasks') || [];
+      
+      // Remove the task
+      tasks = tasks.filter(t => t.id !== id);
+      
+      // Save back to KV
+      await kv.set('tasks', tasks);
+      
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('Task delete error:', error);
+      return res.status(500).json({ error: 'Failed to delete task' });
+    }
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

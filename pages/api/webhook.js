@@ -1,14 +1,40 @@
 // pages/api/webhook.js
-// This endpoint receives Plaud transcripts from Zapier and extracts action items using Gemini
+// This endpoint receives Plaud transcripts and extracts action items using Gemini
+// Data is persisted in Vercel KV
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
-// In-memory storage for demo (replace with database in production)
-// Vercel KV, Supabase, or Planetscale would be good options
-let meetings = [];
-let tasks = [];
+import { kv } from '@vercel/kv';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Helper functions for KV storage
+async function getMeetings() {
+  try {
+    const meetings = await kv.get('meetings');
+    return meetings || [];
+  } catch (e) {
+    console.error('KV get meetings error:', e);
+    return [];
+  }
+}
+
+async function getTasks() {
+  try {
+    const tasks = await kv.get('tasks');
+    return tasks || [];
+  } catch (e) {
+    console.error('KV get tasks error:', e);
+    return [];
+  }
+}
+
+async function saveMeetings(meetings) {
+  await kv.set('meetings', meetings);
+}
+
+async function saveTasks(tasks) {
+  await kv.set('tasks', tasks);
+}
 
 const EXTRACTION_PROMPT = `You are an expert at extracting actionable items from meeting transcripts. 
 
@@ -62,12 +88,14 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // GET - Return all meetings and tasks
+  // GET - Return all meetings and tasks from KV
   if (req.method === 'GET') {
+    const meetings = await getMeetings();
+    const tasks = await getTasks();
     return res.status(200).json({ meetings, tasks });
   }
 
-  // POST - Process new transcript from Zapier
+  // POST - Process new transcript
   if (req.method === 'POST') {
     try {
       const { transcript, title, date, noteId } = req.body;
@@ -136,13 +164,21 @@ export default async function handler(req, res) {
         context: task.context || null
       }));
 
-      // Store in memory (replace with database calls)
+      // Get existing data from KV
+      let meetings = await getMeetings();
+      let tasks = await getTasks();
+
+      // Add new data
       meetings.unshift(meeting);
       tasks = [...newTasks, ...tasks];
 
-      // Keep only last 50 meetings and 200 tasks in memory
+      // Keep only last 50 meetings and 200 tasks
       meetings = meetings.slice(0, 50);
       tasks = tasks.slice(0, 200);
+
+      // Save to KV
+      await saveMeetings(meetings);
+      await saveTasks(tasks);
 
       console.log(`Extracted ${newTasks.length} tasks from meeting: ${meeting.title}`);
 
