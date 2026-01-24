@@ -92,7 +92,8 @@ function TaskCard({ task, meeting, onDelete }) {
             e.stopPropagation();
             setExpandContext(!expandContext);
           }}
-          className={`text-xs text-slate-400 mb-2 ml-5 italic text-left w-full hover:text-slate-500 ${expandContext ? '' : 'line-clamp-2'}`}
+          className={`text-xs text-slate-400 mb-2 ml-5 mr-1 italic text-left hover:text-slate-500 break-words ${expandContext ? '' : 'line-clamp-2'}`}
+          style={{ maxWidth: 'calc(100% - 1.5rem)' }}
           title={expandContext ? 'Click to collapse' : 'Click to expand'}
         >
           {task.context}
