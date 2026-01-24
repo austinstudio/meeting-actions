@@ -79,7 +79,7 @@ export default async function handler(req, res) {
       console.log('Processing transcript:', title || 'Untitled meeting');
 
       // Call Gemini to extract action items
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
       
       const result = await model.generateContent(EXTRACTION_PROMPT + transcript);
       const response = await result.response;
