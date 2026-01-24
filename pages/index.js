@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search } from 'lucide-react';
 
 const DEFAULT_COLUMNS = [
   { id: 'todo', label: 'To Do', color: 'slate', order: 0 },
@@ -880,6 +880,47 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
   );
 }
 
+function SearchInput({ value, onChange, resultCount }) {
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+      if (e.key === 'Escape' && document.activeElement === inputRef.current) {
+        onChange('');
+        inputRef.current?.blur();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onChange]);
+
+  return (
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={value ? `${resultCount} results` : "Search tasks... (\u2318K)"}
+        className="pl-9 pr-8 py-1.5 w-64 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+      />
+      {value && (
+        <button
+          onClick={() => onChange('')}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        >
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function MeetingKanban() {
   const [tasks, setTasks] = useState([]);
   const [meetings, setMeetings] = useState([]);
@@ -896,6 +937,7 @@ export default function MeetingKanban() {
   const [editingTask, setEditingTask] = useState(null);
   const [addingToColumn, setAddingToColumn] = useState(null);
   const [draggingColumn, setDraggingColumn] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch data from API
   const fetchData = async () => {
@@ -1150,15 +1192,34 @@ export default function MeetingKanban() {
     // Archived filter
     if (!showArchived && t.archived) return false;
     if (showArchived && !t.archived) return false;
-    
+
     // Meeting filter
     if (selectedMeeting && t.meetingId !== selectedMeeting) return false;
-    
+
     // Type/owner filters
     if (view === 'mine' && t.owner !== 'Me') return false;
     if (view === 'follow-ups' && t.type !== 'follow-up') return false;
     if (view === 'actions' && t.type !== 'action') return false;
-    
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const meeting = meetings.find(m => m.id === t.meetingId);
+
+      const searchFields = [
+        t.task,
+        t.owner,
+        t.person,
+        t.context,
+        meeting?.title,
+        meeting?.participants?.join(' ')
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      if (!searchFields.includes(query)) {
+        return false;
+      }
+    }
+
     return true;
   });
 
@@ -1311,8 +1372,14 @@ export default function MeetingKanban() {
         <main className="flex-1 p-6 overflow-x-auto">
           {/* Filters */}
           <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500 mr-2">Show:</span>
+            <div className="flex items-center gap-3">
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                resultCount={filteredTasks.length}
+              />
+              <div className="w-px h-6 bg-slate-200" />
+              <span className="text-sm text-slate-500">Show:</span>
               {[
                 { id: 'all', label: 'All Items' },
                 { id: 'mine', label: 'My Tasks' },
@@ -1331,6 +1398,16 @@ export default function MeetingKanban() {
                 </button>
               ))}
               
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="ml-2 px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-700 font-medium flex items-center gap-1"
+                >
+                  "{searchQuery.slice(0, 15)}{searchQuery.length > 15 ? '...' : ''}"
+                  <X size={14} />
+                </button>
+              )}
+
               {selectedMeeting && (
                 <button
                   onClick={() => setSelectedMeeting(null)}
@@ -1340,7 +1417,7 @@ export default function MeetingKanban() {
                   <X size={14} />
                 </button>
               )}
-              
+
               {showArchived && (
                 <span className="ml-2 px-3 py-1.5 rounded-full text-sm bg-slate-200 text-slate-600 font-medium">
                   Viewing Archived
