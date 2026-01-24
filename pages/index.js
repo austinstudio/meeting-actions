@@ -1165,11 +1165,26 @@ export default function MeetingKanban() {
   const stats = {
     total: tasks.filter(t => !t.archived).length,
     mine: tasks.filter(t => t.owner === 'Me' && !t.archived).length,
-    todo: tasks.filter(t => t.status === 'todo' && !t.archived).length,
-    inProgress: tasks.filter(t => t.status === 'in-progress' && !t.archived).length,
-    done: tasks.filter(t => t.status === 'done' && !t.archived).length,
     overdue: tasks.filter(t => new Date(t.dueDate) < new Date() && t.status !== 'done' && !t.archived).length,
     archived: tasks.filter(t => t.archived).length,
+  };
+
+  // Build column stats dynamically
+  const columnStats = columns.sort((a, b) => a.order - b.order).map(col => ({
+    ...col,
+    count: tasks.filter(t => t.status === col.id && !t.archived).length
+  }));
+
+  // Color mapping for stats display
+  const statColors = {
+    slate: 'text-slate-800',
+    blue: 'text-blue-600',
+    amber: 'text-amber-600',
+    emerald: 'text-emerald-600',
+    purple: 'text-purple-600',
+    rose: 'text-rose-600',
+    indigo: 'text-indigo-600',
+    teal: 'text-teal-600',
   };
 
   return (
@@ -1187,24 +1202,18 @@ export default function MeetingKanban() {
                 <div className="text-2xl font-bold text-indigo-600">{stats.mine}</div>
                 <div className="text-xs text-slate-500">My Tasks</div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-slate-800">{stats.todo}</div>
-                <div className="text-xs text-slate-500">To Do</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{stats.inProgress}</div>
-                <div className="text-xs text-slate-500">In Progress</div>
-              </div>
+              {columnStats.map(col => (
+                <div key={col.id} className="text-center">
+                  <div className={`text-2xl font-bold ${statColors[col.color] || 'text-slate-800'}`}>{col.count}</div>
+                  <div className="text-xs text-slate-500">{col.label}</div>
+                </div>
+              ))}
               {stats.overdue > 0 && (
                 <div className="text-center">
                   <div className="text-2xl font-bold text-rose-600">{stats.overdue}</div>
                   <div className="text-xs text-slate-500">Overdue</div>
                 </div>
               )}
-              <div className="text-center">
-                <div className="text-2xl font-bold text-emerald-600">{stats.done}</div>
-                <div className="text-xs text-slate-500">Done</div>
-              </div>
             </div>
             <button
               onClick={fetchData}
@@ -1281,11 +1290,11 @@ export default function MeetingKanban() {
             <div className="space-y-2">
               <button
                 onClick={handleArchiveDone}
-                disabled={stats.done === 0}
+                disabled={(columnStats.find(c => c.id === 'done')?.count || 0) === 0}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Archive size={16} />
-                Archive completed ({stats.done})
+                Archive completed ({columnStats.find(c => c.id === 'done')?.count || 0})
               </button>
               <button
                 onClick={() => setShowArchived(!showArchived)}
