@@ -1,5 +1,5 @@
 // pages/api/tasks/[id].js
-// Update individual task status with KV persistence
+// Update, archive, or delete individual tasks
 
 import { kv } from '@vercel/kv';
 
@@ -16,20 +16,29 @@ export default async function handler(req, res) {
 
   if (req.method === 'PATCH') {
     try {
-      const { status, priority } = req.body;
+      const { status, priority, archived, column } = req.body;
       
       // Get current tasks from KV
       let tasks = await kv.get('tasks') || [];
       
-      // Find and update the task
+      // Find the task
       const taskIndex = tasks.findIndex(t => t.id === id);
       if (taskIndex === -1) {
         return res.status(404).json({ error: 'Task not found' });
       }
       
       // Update fields
-      if (status) tasks[taskIndex].status = status;
-      if (priority) tasks[taskIndex].priority = priority;
+      if (status !== undefined) tasks[taskIndex].status = status;
+      if (priority !== undefined) tasks[taskIndex].priority = priority;
+      if (archived !== undefined) {
+        tasks[taskIndex].archived = archived;
+        if (archived) {
+          tasks[taskIndex].archivedAt = new Date().toISOString();
+        }
+      }
+      if (column !== undefined) tasks[taskIndex].column = column;
+      
+      tasks[taskIndex].updatedAt = new Date().toISOString();
       
       // Save back to KV
       await kv.set('tasks', tasks);
@@ -48,6 +57,12 @@ export default async function handler(req, res) {
     try {
       // Get current tasks from KV
       let tasks = await kv.get('tasks') || [];
+      
+      // Check if task exists
+      const task = tasks.find(t => t.id === id);
+      if (!task) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
       
       // Remove the task
       tasks = tasks.filter(t => t.id !== id);
