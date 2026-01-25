@@ -1,8 +1,7 @@
 // pages/api/parse-file.js
 // Parses uploaded PDF or TXT files and returns the text content
 
-// pdf-parse has issues on Vercel, so we use the underlying pdf.js library directly
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { extractText } from 'unpdf';
 
 export const config = {
   api: {
@@ -11,25 +10,6 @@ export const config = {
     },
   },
 };
-
-async function extractTextFromPDF(buffer) {
-  const uint8Array = new Uint8Array(buffer);
-  const loadingTask = getDocument({ data: uint8Array });
-  const pdfDocument = await loadingTask.promise;
-
-  let fullText = '';
-
-  for (let i = 1; i <= pdfDocument.numPages; i++) {
-    const page = await pdfDocument.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map(item => item.str)
-      .join(' ');
-    fullText += pageText + '\n';
-  }
-
-  return fullText;
-}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -57,9 +37,10 @@ export default async function handler(req, res) {
     let text = '';
 
     if (type === 'application/pdf' || filename?.toLowerCase().endsWith('.pdf')) {
-      // Parse PDF
+      // Parse PDF using unpdf
       try {
-        text = await extractTextFromPDF(buffer);
+        const { text: pdfText } = await extractText(buffer);
+        text = pdfText;
       } catch (pdfError) {
         console.error('PDF parse error:', pdfError);
         return res.status(400).json({ error: 'Failed to parse PDF. Please ensure the file is a valid PDF.' });
