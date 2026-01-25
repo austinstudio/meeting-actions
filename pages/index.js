@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File } from 'lucide-react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign } from 'lucide-react';
 
 const DEFAULT_COLUMNS = [
   { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
@@ -691,7 +691,7 @@ function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmLabe
   );
 }
 
-function EditTaskModal({ isOpen, task, onClose, onSave, columns }) {
+function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment }) {
   const [formData, setFormData] = useState({
     task: '',
     owner: '',
@@ -703,6 +703,9 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns }) {
     status: 'todo'
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('details');
+  const [newComment, setNewComment] = useState('');
+  const [isAddingComment, setIsAddingComment] = useState(false);
 
   useEffect(() => {
     if (task && isOpen) {
@@ -716,6 +719,8 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns }) {
         context: task.context || '',
         status: task.status || 'todo'
       });
+      setActiveTab('details');
+      setNewComment('');
     }
   }, [task, isOpen]);
 
@@ -727,162 +732,383 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns }) {
     onClose();
   };
 
+  const handleAddComment = async () => {
+    if (!newComment.trim() || isAddingComment) return;
+
+    setIsAddingComment(true);
+    try {
+      await onAddComment(task.id, newComment.trim());
+      setNewComment('');
+    } catch (err) {
+      console.error('Failed to add comment:', err);
+    } finally {
+      setIsAddingComment(false);
+    }
+  };
+
+  const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const getActivityDescription = (activity) => {
+    const fieldLabels = {
+      status: 'status',
+      priority: 'priority',
+      task: 'description',
+      owner: 'owner',
+      person: 'follow-up person',
+      dueDate: 'due date',
+      context: 'context',
+      type: 'type',
+      archived: 'archived status'
+    };
+
+    if (activity.type === 'comment') {
+      return 'added a comment';
+    }
+
+    const fieldLabel = fieldLabels[activity.field] || activity.field;
+    if (activity.oldValue && activity.newValue) {
+      return `changed ${fieldLabel} from "${activity.oldValue}" to "${activity.newValue}"`;
+    }
+    if (activity.newValue) {
+      return `set ${fieldLabel} to "${activity.newValue}"`;
+    }
+    return `updated ${fieldLabel}`;
+  };
+
+  // Parse @mentions in comment text
+  const renderCommentText = (text) => {
+    const parts = text.split(/(@\w+)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('@')) {
+        return (
+          <span key={i} className="text-indigo-600 font-medium bg-indigo-50 px-1 rounded">
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   if (!isOpen || !task) return null;
+
+  const comments = task.comments || [];
+  const activity = task.activity || [];
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-800">Edit Task</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X size={20} />
           </button>
         </div>
-        
-        <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-140px)]">
-          {/* Task Description */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Task Description <span className="text-rose-500">*</span>
-            </label>
-            <textarea
-              value={formData.task}
-              onChange={(e) => setFormData({ ...formData, task: e.target.value })}
-              rows={2}
-              required
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-            />
-          </div>
 
-          {/* Owner */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Owner / Assigned To
-            </label>
-            <input
-              type="text"
-              value={formData.owner}
-              onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
-              placeholder="Me, John, Sarah, etc."
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-          </div>
+        {/* Tabs */}
+        <div className="flex border-b border-slate-200 px-4">
+          <button
+            onClick={() => setActiveTab('details')}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'details'
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Pencil size={16} />
+            Details
+          </button>
+          <button
+            onClick={() => setActiveTab('comments')}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'comments'
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <MessageSquare size={16} />
+            Comments
+            {comments.length > 0 && (
+              <span className="bg-slate-100 text-slate-600 text-xs px-1.5 py-0.5 rounded-full">
+                {comments.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('activity')}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'activity'
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <History size={16} />
+            Activity
+            {activity.length > 0 && (
+              <span className="bg-slate-100 text-slate-600 text-xs px-1.5 py-0.5 rounded-full">
+                {activity.length}
+              </span>
+            )}
+          </button>
+        </div>
 
-          {/* Type and Person (for follow-ups) */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Type
-              </label>
-              <select
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              >
-                <option value="action">Action</option>
-                <option value="follow-up">Follow-up</option>
-              </select>
-            </div>
-            {formData.type === 'follow-up' && (
+        {/* Tab Content */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Details Tab */}
+          {activeTab === 'details' && (
+            <form onSubmit={handleSubmit} className="p-4 space-y-4">
+              {/* Task Description */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Follow-up With
+                  Task Description <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={formData.task}
+                  onChange={(e) => setFormData({ ...formData, task: e.target.value })}
+                  rows={2}
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                />
+              </div>
+
+              {/* Owner */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Owner / Assigned To
                 </label>
                 <input
                   type="text"
-                  value={formData.person}
-                  onChange={(e) => setFormData({ ...formData, person: e.target.value })}
-                  placeholder="Person name"
+                  value={formData.owner}
+                  onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
+                  placeholder="Me, John, Sarah, etc."
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
               </div>
-            )}
-          </div>
 
-          {/* Due Date and Priority */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Due Date
-              </label>
-              <input
-                type="date"
-                value={formData.dueDate}
-                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
+              {/* Type and Person (for follow-ups) */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Type
+                  </label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="action">Action</option>
+                    <option value="follow-up">Follow-up</option>
+                  </select>
+                </div>
+                {formData.type === 'follow-up' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Follow-up With
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.person}
+                      onChange={(e) => setFormData({ ...formData, person: e.target.value })}
+                      placeholder="Person name"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Due Date and Priority */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.dueDate}
+                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Priority
+                  </label>
+                  <select
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Status
+                </label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  {columns.map(col => (
+                    <option key={col.id} value={col.id}>{col.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Context */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Context / Notes
+                </label>
+                <textarea
+                  value={formData.context}
+                  onChange={(e) => setFormData({ ...formData, context: e.target.value })}
+                  rows={3}
+                  placeholder="Additional context about this task..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!formData.task.trim() || isSaving}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isSaving ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Comments Tab */}
+          {activeTab === 'comments' && (
+            <div className="p-4 flex flex-col h-full">
+              {/* Comment Input */}
+              <div className="mb-4">
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Add a comment... (use @name to mention someone)"
+                      rows={2}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          handleAddComment();
+                        }
+                      }}
+                    />
+                    <div className="absolute right-2 bottom-2 text-xs text-slate-400">
+                      {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter to send
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleAddComment}
+                    disabled={!newComment.trim() || isAddingComment}
+                    className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed self-end"
+                  >
+                    {isAddingComment ? (
+                      <RefreshCw size={18} className="animate-spin" />
+                    ) : (
+                      <Send size={18} />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Comments List */}
+              <div className="flex-1 overflow-y-auto space-y-3">
+                {comments.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No comments yet</p>
+                    <p className="text-xs mt-1">Add a comment to keep track of updates</p>
+                  </div>
+                ) : (
+                  [...comments].reverse().map(comment => (
+                    <div key={comment.id} className="bg-slate-50 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-slate-700">{comment.user}</span>
+                        <span className="text-xs text-slate-400">{formatTimestamp(comment.timestamp)}</span>
+                      </div>
+                      <p className="text-sm text-slate-600">{renderCommentText(comment.text)}</p>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Priority
-              </label>
-              <select
-                value={formData.priority}
-                onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              >
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-              </select>
-            </div>
-          </div>
+          )}
 
-          {/* Status */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Status
-            </label>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            >
-              {columns.map(col => (
-                <option key={col.id} value={col.id}>{col.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Context */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Context / Notes
-            </label>
-            <textarea
-              value={formData.context}
-              onChange={(e) => setFormData({ ...formData, context: e.target.value })}
-              rows={3}
-              placeholder="Additional context about this task..."
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-            />
-          </div>
-
-          {/* Buttons */}
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!formData.task.trim() || isSaving}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {isSaving ? (
-                <>
-                  <RefreshCw size={16} className="animate-spin" />
-                  Saving...
-                </>
+          {/* Activity Tab */}
+          {activeTab === 'activity' && (
+            <div className="p-4">
+              {activity.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <History size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No activity yet</p>
+                  <p className="text-xs mt-1">Changes to this task will appear here</p>
+                </div>
               ) : (
-                'Save Changes'
+                <div className="space-y-3">
+                  {[...activity].reverse().map(item => (
+                    <div key={item.id} className="flex gap-3 text-sm">
+                      <div className="flex-shrink-0 w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center">
+                        {item.type === 'comment' ? (
+                          <MessageSquare size={14} className="text-slate-500" />
+                        ) : (
+                          <History size={14} className="text-slate-500" />
+                        )}
+                      </div>
+                      <div className="flex-1 pt-1">
+                        <p className="text-slate-600">
+                          <span className="font-medium text-slate-700">{item.user}</span>
+                          {' '}{getActivityDescription(item)}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">{formatTimestamp(item.timestamp)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
-            </button>
-          </div>
-        </form>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1299,16 +1525,52 @@ export default function MeetingKanban() {
     setTasks(prev => prev.map(t =>
       t.id === taskId ? { ...t, ...updatedData } : t
     ));
-    
+
     try {
-      await fetch(`/api/tasks/${taskId}`, {
+      const response = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedData)
       });
+
+      const data = await response.json();
+      if (data.success) {
+        // Update with server response to get activity log
+        setTasks(prev => prev.map(t =>
+          t.id === taskId ? data.task : t
+        ));
+        // Update editingTask if it's the same task
+        if (editingTask?.id === taskId) {
+          setEditingTask(data.task);
+        }
+      }
     } catch (err) {
       console.error('Failed to update task:', err);
       fetchData(); // Refresh on error
+    }
+  };
+
+  const handleAddComment = async (taskId, comment) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment, user: CURRENT_USER })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Update the task in state with new comment
+        setTasks(prev => prev.map(t =>
+          t.id === taskId ? data.task : t
+        ));
+        // Update editingTask to show new comment
+        if (editingTask?.id === taskId) {
+          setEditingTask(data.task);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to add comment:', err);
     }
   };
 
@@ -1772,6 +2034,7 @@ export default function MeetingKanban() {
         columns={columns}
         onClose={() => setEditingTask(null)}
         onSave={handleEditTask}
+        onAddComment={handleAddComment}
       />
       
       <AddTaskModal
