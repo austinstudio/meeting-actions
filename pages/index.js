@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ListChecks, Rows3, Rows4, LayoutList, GripVertical } from 'lucide-react';
 
 const DEFAULT_COLUMNS = [
   { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
@@ -21,15 +21,113 @@ const COLUMN_COLORS = {
 };
 
 const priorityColors = {
-  high: 'bg-rose-100 text-rose-700',
-  medium: 'bg-amber-100 text-amber-700',
-  low: 'bg-slate-100 text-slate-600',
+  high: 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300',
+  medium: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+  low: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
 };
+
+// Tag colors and predefined tags
+const TAG_COLORS = {
+  urgent: { bg: 'bg-rose-100 dark:bg-rose-900/50', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800' },
+  client: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-800' },
+  bug: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-700 dark:text-red-300', border: 'border-red-200 dark:border-red-800' },
+  feature: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' },
+  review: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800' },
+  design: { bg: 'bg-teal-100 dark:bg-teal-900/50', text: 'text-teal-700 dark:text-teal-300', border: 'border-teal-200 dark:border-teal-800' },
+  default: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-300', border: 'border-slate-200 dark:border-slate-600' },
+};
+
+const PREDEFINED_TAGS = ['urgent', 'client', 'bug', 'feature', 'review', 'design'];
 
 const typeIcons = {
   'action': <CheckCircle2 size={14} />,
   'follow-up': <ArrowRight size={14} />,
 };
+
+// TagBadge component
+function TagBadge({ tag, onRemove, small = false }) {
+  const tagKey = tag.toLowerCase();
+  const colors = TAG_COLORS[tagKey] || TAG_COLORS.default;
+
+  return (
+    <span className={`inline-flex items-center gap-1 ${small ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs'} rounded-full ${colors.bg} ${colors.text} border ${colors.border}`}>
+      #{tag}
+      {onRemove && (
+        <button onClick={(e) => { e.stopPropagation(); onRemove(tag); }} className="hover:opacity-70">
+          <X size={small ? 10 : 12} />
+        </button>
+      )}
+    </span>
+  );
+}
+
+// SubtaskProgress component
+function SubtaskProgress({ subtasks = [], compact = false }) {
+  const completed = subtasks.filter(s => s.completed).length;
+  const total = subtasks.length;
+  const percentage = total > 0 ? (completed / total) * 100 : 0;
+
+  if (total === 0) return null;
+
+  return (
+    <div className={`flex items-center gap-2 ${compact ? 'text-[10px]' : 'text-xs'}`}>
+      <div className={`flex-1 ${compact ? 'h-1' : 'h-1.5'} bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden`}>
+        <div
+          className={`h-full rounded-full transition-all ${percentage === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+      <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">
+        {completed}/{total}
+      </span>
+    </div>
+  );
+}
+
+// DueDateBadge component for smart due date display
+function DueDateBadge({ dueDate, status }) {
+  const date = new Date(dueDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const nextWeek = new Date(today);
+  nextWeek.setDate(nextWeek.getDate() + 7);
+
+  const dateOnly = new Date(date);
+  dateOnly.setHours(0, 0, 0, 0);
+
+  const isCompleted = status === 'done';
+  const isOverdue = dateOnly < today && !isCompleted;
+  const isToday = dateOnly.getTime() === today.getTime();
+  const isTomorrow = dateOnly.getTime() === tomorrow.getTime();
+  const isThisWeek = dateOnly > today && dateOnly <= nextWeek;
+
+  let label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  let classes = 'text-slate-400 dark:text-slate-500';
+
+  if (isCompleted) {
+    classes = 'text-slate-400 dark:text-slate-500';
+  } else if (isOverdue) {
+    label = 'Overdue';
+    classes = 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-full animate-pulse';
+  } else if (isToday) {
+    label = 'Due Today';
+    classes = 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full';
+  } else if (isTomorrow) {
+    label = 'Tomorrow';
+    classes = 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 px-2 py-0.5 rounded-full';
+  } else if (isThisWeek) {
+    classes = 'text-blue-600 dark:text-blue-400';
+  }
+
+  return (
+    <div className={`flex items-center gap-1 text-xs ${classes}`}>
+      <Clock size={12} />
+      {label}
+    </div>
+  );
+}
 
 // Current user configuration
 const CURRENT_USER = 'Corey';
@@ -39,10 +137,11 @@ const isCurrentUser = (name) => {
   return normalized === 'me' || normalized === 'corey';
 };
 
-function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onPermanentDelete }) {
+function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onPermanentDelete, onPin, viewDensity = 'normal' }) {
   const [isDragging, setIsDragging] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [expandContext, setExpandContext] = useState(false);
+  const [expandSubtasks, setExpandSubtasks] = useState(false);
 
   const handleDragStart = (e) => {
     if (isTrashView) {
@@ -51,22 +150,33 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
     }
     setIsDragging(true);
     e.dataTransfer.setData('taskId', task.id);
+    e.dataTransfer.setData('taskOrder', task.order || 0);
   };
 
   const handleDragEnd = () => setIsDragging(false);
 
-  const dueDate = new Date(task.dueDate);
-  const today = new Date();
-  const isOverdue = dueDate < today && task.status !== 'done';
-  const isDueSoon = !isOverdue && (dueDate - today) / (1000 * 60 * 60 * 24) <= 2;
+  // Density-based styles
+  const densityStyles = {
+    compact: { padding: 'p-2', text: 'text-xs', gap: 'gap-1', hideContext: true },
+    normal: { padding: 'p-3', text: 'text-sm', gap: 'gap-2', hideContext: false },
+    spacious: { padding: 'p-4', text: 'text-sm', gap: 'gap-3', hideContext: false },
+  };
+  const density = densityStyles[viewDensity] || densityStyles.normal;
 
   return (
     <div
       draggable={!isTrashView}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className={`bg-white rounded-lg border border-slate-200 p-3 ${isTrashView ? 'cursor-default opacity-75' : 'cursor-grab active:cursor-grabbing'} shadow-sm hover:shadow-md transition-all relative group ${isDragging ? 'opacity-50 rotate-2' : ''}`}
+      className={`bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 ${density.padding} ${isTrashView ? 'cursor-default opacity-75' : 'cursor-grab active:cursor-grabbing'} shadow-sm hover:shadow-md transition-all relative group ${isDragging ? 'opacity-50 rotate-2' : ''} ${task.pinned ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
     >
+      {/* Pin indicator */}
+      {task.pinned && (
+        <div className="absolute -top-1 -left-1 w-5 h-5 bg-amber-400 dark:bg-amber-500 rounded-full flex items-center justify-center shadow-sm">
+          <Pin size={10} className="text-white transform rotate-45" />
+        </div>
+      )}
+
       {/* Action buttons - different for trash view */}
       <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {isTrashView ? (
@@ -76,7 +186,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
                 e.stopPropagation();
                 onRestore(task.id);
               }}
-              className="p-1 text-slate-300 hover:text-emerald-500"
+              className="p-1 text-slate-300 dark:text-slate-600 hover:text-emerald-500"
               title="Restore task"
             >
               <RotateCcw size={14} />
@@ -86,7 +196,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
                 e.stopPropagation();
                 onPermanentDelete(task.id);
               }}
-              className="p-1 text-slate-300 hover:text-rose-500"
+              className="p-1 text-slate-300 dark:text-slate-600 hover:text-rose-500"
               title="Delete permanently"
             >
               <Trash2 size={14} />
@@ -97,9 +207,19 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                onPin(task.id, !task.pinned);
+              }}
+              className={`p-1 ${task.pinned ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600 hover:text-amber-500'}`}
+              title={task.pinned ? 'Unpin task' : 'Pin task'}
+            >
+              <Pin size={14} className={task.pinned ? 'transform rotate-45' : ''} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                 onEdit(task);
               }}
-              className="p-1 text-slate-300 hover:text-indigo-500"
+              className="p-1 text-slate-300 dark:text-slate-600 hover:text-indigo-500"
               title="Edit task"
             >
               <Pencil size={14} />
@@ -109,7 +229,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
                 e.stopPropagation();
                 onDelete(task.id);
               }}
-              className="p-1 text-slate-300 hover:text-rose-500"
+              className="p-1 text-slate-300 dark:text-slate-600 hover:text-rose-500"
               title="Delete task"
             >
               <Trash2 size={14} />
@@ -117,34 +237,68 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
           </>
         )}
       </div>
-      
+
       {/* Meeting source tag */}
       {meeting && (
         <div className="flex items-center gap-1.5 mb-2 -mt-1 pr-12">
           <FileText size={12} className="text-indigo-400 flex-shrink-0" />
-          <span className="text-xs text-indigo-600 font-medium truncate" title={meeting.title}>
+          <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium truncate" title={meeting.title}>
             {meeting.title}
           </span>
         </div>
       )}
-      
-      <div className="flex items-start gap-2 mb-2">
-        <div className="text-slate-400 mt-0.5">
+
+      <div className={`flex items-start ${density.gap} mb-2`}>
+        <div className="text-slate-400 dark:text-slate-500 mt-0.5">
           {typeIcons[task.type] || typeIcons['action']}
         </div>
-        <p className="text-sm text-slate-800 font-medium leading-snug flex-1 pr-8">
+        <p className={`${density.text} text-slate-800 dark:text-slate-100 font-medium leading-snug flex-1 pr-8`}>
           {task.task}
         </p>
       </div>
 
-      {/* Context - clickable to expand */}
-      {task.context && (
+      {/* Tags */}
+      {task.tags && task.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2 ml-5">
+          {task.tags.map(tag => (
+            <TagBadge key={tag} tag={tag} small={viewDensity === 'compact'} />
+          ))}
+        </div>
+      )}
+
+      {/* Subtasks progress */}
+      {task.subtasks && task.subtasks.length > 0 && (
+        <div className="mb-2 ml-5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpandSubtasks(!expandSubtasks);
+            }}
+            className="w-full"
+          >
+            <SubtaskProgress subtasks={task.subtasks} compact={viewDensity === 'compact'} />
+          </button>
+          {expandSubtasks && (
+            <div className="mt-2 space-y-1 text-xs">
+              {task.subtasks.map(st => (
+                <div key={st.id} className={`flex items-center gap-2 ${st.completed ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-slate-600 dark:text-slate-300'}`}>
+                  <CheckCircle2 size={12} className={st.completed ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'} />
+                  {st.text}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Context - clickable to expand (hidden in compact mode) */}
+      {task.context && !density.hideContext && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             setExpandContext(!expandContext);
           }}
-          className={`text-xs text-slate-400 mb-2 ml-5 mr-1 italic text-left hover:text-slate-500 break-words ${expandContext ? '' : 'line-clamp-2'}`}
+          className={`text-xs text-slate-400 dark:text-slate-500 mb-2 ml-5 mr-1 italic text-left hover:text-slate-500 dark:hover:text-slate-400 break-words ${expandContext ? '' : 'line-clamp-2'}`}
           style={{ maxWidth: 'calc(100% - 1.5rem)' }}
           title={expandContext ? 'Click to collapse' : 'Click to expand'}
         >
@@ -154,14 +308,14 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
 
       {/* Owner / Assigned to */}
       <div className="flex items-center gap-1.5 mb-2 ml-5">
-        <User size={12} className="text-slate-400" />
-        <span className={`text-xs ${isCurrentUser(task.owner) ? 'text-indigo-600 font-medium' : 'text-slate-500'}`}>
+        <User size={12} className="text-slate-400 dark:text-slate-500" />
+        <span className={`text-xs ${isCurrentUser(task.owner) ? 'text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-500 dark:text-slate-400'}`}>
           {task.owner || 'Unassigned'}
         </span>
         {task.person && task.type === 'follow-up' && (
           <>
-            <ArrowRight size={10} className="text-slate-300" />
-            <span className="text-xs text-slate-500">{task.person}</span>
+            <ArrowRight size={10} className="text-slate-300 dark:text-slate-600" />
+            <span className="text-xs text-slate-500 dark:text-slate-400">{task.person}</span>
           </>
         )}
       </div>
@@ -172,18 +326,16 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
             {task.priority}
           </span>
         </div>
-        <div className={`flex items-center gap-1 text-xs ${isOverdue ? 'text-rose-600 font-medium' : isDueSoon ? 'text-amber-600' : 'text-slate-400'}`}>
-          <Clock size={12} />
-          {dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-        </div>
+        <DueDateBadge dueDate={task.dueDate} status={task.status} />
       </div>
     </div>
   );
 }
 
-function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete }) {
+function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete, onPinTask, viewDensity }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isColumnDragOver, setIsColumnDragOver] = useState(false);
+  const [dropIndex, setDropIndex] = useState(null);
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -196,18 +348,20 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
   const handleDragLeave = () => {
     setIsDragOver(false);
     setIsColumnDragOver(false);
+    setDropIndex(null);
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e, targetIndex) => {
     e.preventDefault();
     setIsDragOver(false);
     setIsColumnDragOver(false);
-    
+    setDropIndex(null);
+
     const taskId = e.dataTransfer.getData('taskId');
     const columnId = e.dataTransfer.getData('columnId');
-    
+
     if (taskId) {
-      onDrop(taskId, column.id);
+      onDrop(taskId, column.id, targetIndex);
     } else if (columnId && onColumnDrop) {
       onColumnDrop(columnId, column.id);
     }
@@ -222,7 +376,19 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
     if (onColumnDragEnd) onColumnDragEnd();
   };
 
-  const columnTasks = tasks.filter(t => t.status === column.id);
+  // Get and sort column tasks - pinned first, then by order
+  const columnTasks = tasks
+    .filter(t => t.status === column.id)
+    .sort((a, b) => {
+      // Pinned tasks first
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      // Then by order (lower = higher priority)
+      const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+      return orderA - orderB;
+    });
+
   const colors = COLUMN_COLORS[column.color] || COLUMN_COLORS.slate;
 
   return (
@@ -232,24 +398,24 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
       onDragEnd={handleColumnDragEnd}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={`flex-1 min-w-[280px] max-w-[320px] rounded-xl ${colors.bg} border-2 ${isDragOver ? colors.accent : 'border-transparent'} transition-colors ${isDraggingColumn ? 'opacity-50' : ''}`}
+      onDrop={(e) => handleDrop(e, columnTasks.length)}
+      className={`flex-1 min-w-[280px] max-w-[320px] rounded-xl ${colors.bg} dark:bg-opacity-20 border-2 ${isDragOver ? colors.accent : 'border-transparent'} transition-colors ${isDraggingColumn ? 'opacity-50' : ''}`}
     >
-      <div className="p-3 border-b border-slate-200/50 cursor-grab active:cursor-grabbing">
+      <div className="p-3 border-b border-slate-200/50 dark:border-slate-700/50 cursor-grab active:cursor-grabbing">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-slate-700 text-sm">{column.label}</h3>
+          <h3 className="font-semibold text-slate-700 dark:text-slate-200 text-sm">{column.label}</h3>
           <div className="flex items-center gap-1">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onAddTask(column.id);
               }}
-              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white/50 rounded transition-colors"
+              className="p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-slate-700/50 rounded transition-colors"
               title="Add task to this column"
             >
               <Plus size={16} />
             </button>
-            <span className={`text-xs ${colors.badge} text-slate-600 px-2 py-0.5 rounded-full`}>
+            <span className={`text-xs ${colors.badge} dark:bg-opacity-30 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full`}>
               {columnTasks.length}
             </span>
           </div>
@@ -264,17 +430,32 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
             <SkeletonCard />
           </>
         )}
-        {columnTasks.map(task => (
-          <TaskCard
+        {columnTasks.map((task, index) => (
+          <div
             key={task.id}
-            task={task}
-            meeting={meetings.find(m => m.id === task.meetingId)}
-            onDelete={onDeleteTask}
-            onEdit={onEditTask}
-            isTrashView={isTrashView}
-            onRestore={onRestoreTask}
-            onPermanentDelete={onPermanentDelete}
-          />
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDropIndex(index);
+            }}
+            onDrop={(e) => {
+              e.stopPropagation();
+              handleDrop(e, index);
+            }}
+            className={dropIndex === index ? 'border-t-2 border-indigo-400' : ''}
+          >
+            <TaskCard
+              task={task}
+              meeting={meetings.find(m => m.id === task.meetingId)}
+              onDelete={onDeleteTask}
+              onEdit={onEditTask}
+              isTrashView={isTrashView}
+              onRestore={onRestoreTask}
+              onPermanentDelete={onPermanentDelete}
+              onPin={onPinTask}
+              viewDensity={viewDensity}
+            />
+          </div>
         ))}
       </div>
     </div>
@@ -288,24 +469,24 @@ function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, isEmpt
     <div
       className={`relative w-full text-left p-3 rounded-lg border transition-all ${
         isSelected
-          ? 'bg-indigo-50 border-indigo-200'
+          ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-800'
           : isEmpty
-            ? 'bg-slate-50 border-slate-100 opacity-60'
-            : 'bg-white border-slate-200 hover:border-slate-300'
+            ? 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-700 opacity-60'
+            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
       }`}
       onMouseEnter={() => setShowDelete(true)}
       onMouseLeave={() => setShowDelete(false)}
     >
       <button onClick={onClick} className="w-full text-left">
         <div className="flex items-start justify-between gap-2">
-          <h4 className={`font-medium text-sm leading-snug pr-6 ${isEmpty ? 'text-slate-500' : 'text-slate-800'}`}>{meeting.title}</h4>
+          <h4 className={`font-medium text-sm leading-snug pr-6 ${isEmpty ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{meeting.title}</h4>
           {taskCount > 0 && (
-            <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full whitespace-nowrap">
+            <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">
               {taskCount} items
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+        <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 dark:text-slate-400">
           <span className="flex items-center gap-1">
             <Calendar size={12} />
             {new Date(meeting.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -318,13 +499,13 @@ function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, isEmpt
           )}
         </div>
         {meeting.participants && meeting.participants.length > 0 && (
-          <div className="flex items-center gap-1 mt-2 text-xs text-slate-400">
+          <div className="flex items-center gap-1 mt-2 text-xs text-slate-400 dark:text-slate-500">
             <Users size={12} />
             <span className="truncate">{meeting.participants.slice(0, 3).join(', ')}{meeting.participants.length > 3 ? '...' : ''}</span>
           </div>
         )}
       </button>
-      
+
       {/* Delete button */}
       {showDelete && (
         <button
@@ -332,7 +513,7 @@ function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, isEmpt
             e.stopPropagation();
             onDelete(meeting.id, meeting.title);
           }}
-          className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors"
+          className="absolute top-2 right-2 p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"
           title="Delete meeting and all its tasks"
         >
           <Trash2 size={14} />
@@ -344,18 +525,18 @@ function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, isEmpt
 
 function ProcessingOverlay({ onProcessInBackground, canNotify }) {
   return (
-    <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center z-10 rounded-xl">
+    <div className="absolute inset-0 bg-white/95 dark:bg-slate-800/95 backdrop-blur-sm flex flex-col items-center justify-center z-10 rounded-xl">
       {/* AI Processing Animation */}
       <div className="relative mb-6">
         <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 animate-spin-slow opacity-20 absolute inset-0" />
         <div className="w-20 h-20 rounded-full bg-gradient-to-bl from-indigo-500 via-purple-500 to-pink-500 animate-spin-slow-reverse opacity-20 absolute inset-0" />
-        <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center relative">
-          <Sparkles className="w-10 h-10 text-indigo-600 animate-pulse" />
+        <div className="w-20 h-20 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center relative">
+          <Sparkles className="w-10 h-10 text-indigo-600 dark:text-indigo-400 animate-pulse" />
         </div>
       </div>
 
-      <h3 className="text-lg font-semibold text-slate-800 mb-2">AI is analyzing your transcript</h3>
-      <p className="text-sm text-slate-500 mb-6 text-center max-w-xs">
+      <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">AI is analyzing your transcript</h3>
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 text-center max-w-xs">
         Extracting action items, identifying owners, and setting priorities...
       </p>
 
@@ -368,7 +549,7 @@ function ProcessingOverlay({ onProcessInBackground, canNotify }) {
 
       <button
         onClick={onProcessInBackground}
-        className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+        className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
       >
         <Bell size={16} />
         {canNotify ? 'Process in background' : 'Enable notifications & continue'}
@@ -379,25 +560,25 @@ function ProcessingOverlay({ onProcessInBackground, canNotify }) {
 
 function SkeletonCard() {
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-3 animate-pulse">
+    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 animate-pulse">
       <div className="flex items-center gap-1.5 mb-2">
-        <div className="w-3 h-3 rounded bg-indigo-200" />
-        <div className="h-3 bg-indigo-100 rounded w-24" />
+        <div className="w-3 h-3 rounded bg-indigo-200 dark:bg-indigo-900" />
+        <div className="h-3 bg-indigo-100 dark:bg-indigo-900/50 rounded w-24" />
       </div>
       <div className="flex items-start gap-2 mb-2">
-        <div className="w-4 h-4 rounded bg-slate-200 mt-0.5" />
+        <div className="w-4 h-4 rounded bg-slate-200 dark:bg-slate-700 mt-0.5" />
         <div className="flex-1 space-y-2">
-          <div className="h-4 bg-slate-200 rounded w-full" />
-          <div className="h-4 bg-slate-200 rounded w-3/4" />
+          <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full" />
+          <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4" />
         </div>
       </div>
       <div className="flex items-center gap-1.5 mb-2 ml-6">
-        <div className="w-3 h-3 rounded bg-slate-200" />
-        <div className="h-3 bg-slate-100 rounded w-16" />
+        <div className="w-3 h-3 rounded bg-slate-200 dark:bg-slate-700" />
+        <div className="h-3 bg-slate-100 dark:bg-slate-700 rounded w-16" />
       </div>
       <div className="flex items-center justify-between ml-6">
-        <div className="h-5 bg-slate-100 rounded-full w-14" />
-        <div className="h-3 bg-slate-100 rounded w-12" />
+        <div className="h-5 bg-slate-100 dark:bg-slate-700 rounded-full w-14" />
+        <div className="h-3 bg-slate-100 dark:bg-slate-700 rounded w-12" />
       </div>
     </div>
   );
@@ -512,7 +693,7 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden relative">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden relative">
         {/* Processing Overlay */}
         {isProcessing && (
           <ProcessingOverlay
@@ -521,16 +702,16 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
           />
         )}
 
-        <div className="flex items-center justify-between p-4 border-b border-slate-200">
-          <h2 className="text-lg font-semibold text-slate-800">Add Meeting Transcript</h2>
-          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600" disabled={isProcessing}>
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Add Meeting Transcript</h2>
+          <button onClick={handleClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300" disabled={isProcessing}>
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4">
           <div className="mb-4">
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Meeting Title
             </label>
             <input
@@ -538,19 +719,19 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., Sprint Planning, Client Call, 1:1 with Sarah"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
               disabled={isProcessing}
             />
           </div>
 
           <div className="mb-4">
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-slate-700">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                 Transcript <span className="text-rose-500">*</span>
               </label>
               <div className="flex items-center gap-2">
                 {uploadedFile && (
-                  <span className="text-xs text-emerald-600 flex items-center gap-1">
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                     <File size={12} />
                     {uploadedFile}
                   </span>
@@ -567,7 +748,7 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isProcessing || isUploading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition-colors disabled:opacity-50"
                 >
                   {isUploading ? (
                     <>
@@ -596,9 +777,9 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
               rows={12}
               required
               disabled={isProcessing || isUploading}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono text-sm disabled:bg-slate-50"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono text-sm disabled:bg-slate-50 dark:disabled:bg-slate-900 dark:bg-slate-900 dark:text-slate-100"
             />
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
               Paste the full transcript or upload a file. The AI will extract genuine action items and commitments.
             </p>
           </div>
@@ -608,7 +789,7 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
               type="button"
               onClick={handleClose}
               disabled={isProcessing}
-              className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium disabled:opacity-50"
+              className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 font-medium disabled:opacity-50"
             >
               Cancel
             </button>
@@ -645,17 +826,17 @@ function AddColumnModal({ isOpen, onClose, onSubmit }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-4 border-b border-slate-200">
-          <h2 className="text-lg font-semibold text-slate-800">Add New Column</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Add New Column</h2>
+          <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
             <X size={20} />
           </button>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="p-4">
           <div className="mb-4">
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Column Name
             </label>
             <input
@@ -663,13 +844,13 @@ function AddColumnModal({ isOpen, onClose, onSubmit }) {
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g., Review, Blocked, Next Week"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
               autoFocus
             />
           </div>
-          
+
           <div className="mb-4">
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Color
             </label>
             <div className="flex gap-2 flex-wrap">
@@ -683,12 +864,12 @@ function AddColumnModal({ isOpen, onClose, onSubmit }) {
               ))}
             </div>
           </div>
-          
+
           <div className="flex justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium"
+              className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 font-medium"
             >
               Cancel
             </button>
@@ -711,29 +892,29 @@ function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmLabe
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
         <div className="p-6">
           <div className="flex items-start gap-4">
             {danger && (
-              <div className="flex-shrink-0 w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              <div className="flex-shrink-0 w-10 h-10 bg-rose-100 dark:bg-rose-900/30 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
               </div>
             )}
             <div className="flex-1">
-              <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
-              <p className="text-slate-600 mt-1">{message}</p>
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{title}</h2>
+              <p className="text-slate-600 dark:text-slate-300 mt-1">{message}</p>
               {subMessage && (
-                <p className="text-sm text-slate-500 mt-2 bg-slate-50 rounded-lg px-3 py-2">
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2">
                   {subMessage}
                 </p>
               )}
             </div>
           </div>
         </div>
-        <div className="flex justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100">
+        <div className="flex justify-end gap-3 px-6 py-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium rounded-lg hover:bg-slate-100 transition-colors"
+            className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 font-medium rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           >
             Cancel
           </button>
@@ -762,12 +943,16 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
     priority: 'medium',
     type: 'action',
     context: '',
-    status: 'todo'
+    status: 'todo',
+    tags: [],
+    subtasks: []
   });
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
   const [newComment, setNewComment] = useState('');
   const [isAddingComment, setIsAddingComment] = useState(false);
+  const [newTag, setNewTag] = useState('');
+  const [newSubtask, setNewSubtask] = useState('');
 
   useEffect(() => {
     if (task && isOpen) {
@@ -779,12 +964,54 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
         priority: task.priority || 'medium',
         type: task.type || 'action',
         context: task.context || '',
-        status: task.status || 'todo'
+        status: task.status || 'todo',
+        tags: task.tags || [],
+        subtasks: task.subtasks || []
       });
       setActiveTab('details');
       setNewComment('');
+      setNewTag('');
+      setNewSubtask('');
     }
   }, [task, isOpen]);
+
+  // Tag management
+  const addTag = (tag) => {
+    const normalizedTag = tag.toLowerCase().trim().replace(/^#/, '');
+    if (normalizedTag && !formData.tags.includes(normalizedTag)) {
+      setFormData({ ...formData, tags: [...formData.tags, normalizedTag] });
+    }
+    setNewTag('');
+  };
+
+  const removeTag = (tagToRemove) => {
+    setFormData({ ...formData, tags: formData.tags.filter(t => t !== tagToRemove) });
+  };
+
+  // Subtask management
+  const addSubtask = () => {
+    if (!newSubtask.trim()) return;
+    const subtask = {
+      id: `st_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      text: newSubtask.trim(),
+      completed: false
+    };
+    setFormData({ ...formData, subtasks: [...formData.subtasks, subtask] });
+    setNewSubtask('');
+  };
+
+  const toggleSubtask = (subtaskId) => {
+    setFormData({
+      ...formData,
+      subtasks: formData.subtasks.map(st =>
+        st.id === subtaskId ? { ...st, completed: !st.completed } : st
+      )
+    });
+  };
+
+  const removeSubtask = (subtaskId) => {
+    setFormData({ ...formData, subtasks: formData.subtasks.filter(st => st.id !== subtaskId) });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -872,55 +1099,87 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-slate-200">
-          <h2 className="text-lg font-semibold text-slate-800">Edit Task</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Edit Task</h2>
+          <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
             <X size={20} />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-200 px-4">
+        <div className="flex border-b border-slate-200 dark:border-slate-700 px-4 overflow-x-auto">
           <button
             onClick={() => setActiveTab('details')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'details'
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
             }`}
           >
             <Pencil size={16} />
             Details
           </button>
           <button
+            onClick={() => setActiveTab('tags')}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === 'tags'
+                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+          >
+            <Tag size={16} />
+            Tags
+            {formData.tags.length > 0 && (
+              <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs px-1.5 py-0.5 rounded-full">
+                {formData.tags.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('subtasks')}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === 'subtasks'
+                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+          >
+            <ListChecks size={16} />
+            Subtasks
+            {formData.subtasks.length > 0 && (
+              <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs px-1.5 py-0.5 rounded-full">
+                {formData.subtasks.filter(s => s.completed).length}/{formData.subtasks.length}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setActiveTab('comments')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'comments'
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
             }`}
           >
             <MessageSquare size={16} />
             Comments
             {comments.length > 0 && (
-              <span className="bg-slate-100 text-slate-600 text-xs px-1.5 py-0.5 rounded-full">
+              <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs px-1.5 py-0.5 rounded-full">
                 {comments.length}
               </span>
             )}
           </button>
           <button
             onClick={() => setActiveTab('activity')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'activity'
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
             }`}
           >
             <History size={16} />
             Activity
             {activity.length > 0 && (
-              <span className="bg-slate-100 text-slate-600 text-xs px-1.5 py-0.5 rounded-full">
+              <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs px-1.5 py-0.5 rounded-full">
                 {activity.length}
               </span>
             )}
@@ -934,7 +1193,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
               {/* Task Description */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Task Description <span className="text-rose-500">*</span>
                 </label>
                 <textarea
@@ -942,13 +1201,13 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                   onChange={(e) => setFormData({ ...formData, task: e.target.value })}
                   rows={2}
                   required
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none dark:bg-slate-900 dark:text-slate-100"
                 />
               </div>
 
               {/* Owner */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Owner / Assigned To
                 </label>
                 <input
@@ -956,20 +1215,20 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                   value={formData.owner}
                   onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
                   placeholder="Me, John, Sarah, etc."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
                 />
               </div>
 
               {/* Type and Person (for follow-ups) */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Type
                   </label>
                   <select
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
                   >
                     <option value="action">Action</option>
                     <option value="follow-up">Follow-up</option>
@@ -977,7 +1236,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                 </div>
                 {formData.type === 'follow-up' && (
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Follow-up With
                     </label>
                     <input
@@ -985,7 +1244,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                       value={formData.person}
                       onChange={(e) => setFormData({ ...formData, person: e.target.value })}
                       placeholder="Person name"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
                     />
                   </div>
                 )}
@@ -994,24 +1253,24 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
               {/* Due Date and Priority */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Due Date
                   </label>
                   <input
                     type="date"
                     value={formData.dueDate}
                     onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Priority
                   </label>
                   <select
                     value={formData.priority}
                     onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
                   >
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
@@ -1022,13 +1281,13 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
 
               {/* Status */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Status
                 </label>
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
                 >
                   {columns.map(col => (
                     <option key={col.id} value={col.id}>{col.label}</option>
@@ -1038,7 +1297,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
 
               {/* Context */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Context / Notes
                 </label>
                 <textarea
@@ -1046,7 +1305,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                   onChange={(e) => setFormData({ ...formData, context: e.target.value })}
                   rows={3}
                   placeholder="Additional context about this task..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none dark:bg-slate-900 dark:text-slate-100"
                 />
               </div>
 
@@ -1055,7 +1314,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium"
+                  className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 font-medium"
                 >
                   Cancel
                 </button>
@@ -1077,6 +1336,168 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
             </form>
           )}
 
+          {/* Tags Tab */}
+          {activeTab === 'tags' && (
+            <div className="p-4">
+              {/* Predefined Tags */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Quick Add Tags
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {PREDEFINED_TAGS.map(tag => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => addTag(tag)}
+                      disabled={formData.tags.includes(tag)}
+                      className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                        formData.tags.includes(tag)
+                          ? 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-600 cursor-not-allowed'
+                          : `${TAG_COLORS[tag]?.bg || TAG_COLORS.default.bg} ${TAG_COLORS[tag]?.text || TAG_COLORS.default.text} ${TAG_COLORS[tag]?.border || TAG_COLORS.default.border} hover:opacity-80`
+                      }`}
+                    >
+                      #{tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Tag Input */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Add Custom Tag
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addTag(newTag);
+                      }
+                    }}
+                    placeholder="Type a tag name..."
+                    className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => addTag(newTag)}
+                    disabled={!newTag.trim()}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Current Tags */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Current Tags ({formData.tags.length})
+                </label>
+                {formData.tags.length === 0 ? (
+                  <p className="text-sm text-slate-400 dark:text-slate-500 italic">No tags added yet</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {formData.tags.map(tag => (
+                      <TagBadge key={tag} tag={tag} onRemove={removeTag} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Subtasks Tab */}
+          {activeTab === 'subtasks' && (
+            <div className="p-4">
+              {/* Add Subtask */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Add Subtask
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newSubtask}
+                    onChange={(e) => setNewSubtask(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addSubtask();
+                      }
+                    }}
+                    placeholder="Enter subtask..."
+                    className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={addSubtask}
+                    disabled={!newSubtask.trim()}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Subtask Progress */}
+              {formData.subtasks.length > 0 && (
+                <div className="mb-4">
+                  <SubtaskProgress subtasks={formData.subtasks} />
+                </div>
+              )}
+
+              {/* Subtasks List */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Subtasks ({formData.subtasks.length})
+                </label>
+                {formData.subtasks.length === 0 ? (
+                  <p className="text-sm text-slate-400 dark:text-slate-500 italic">No subtasks added yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {formData.subtasks.map(subtask => (
+                      <div
+                        key={subtask.id}
+                        className={`flex items-center gap-3 p-2 rounded-lg border ${
+                          subtask.completed
+                            ? 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleSubtask(subtask.id)}
+                          className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                            subtask.completed
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : 'border-slate-300 dark:border-slate-600 hover:border-emerald-500'
+                          }`}
+                        >
+                          {subtask.completed && <CheckCircle2 size={12} />}
+                        </button>
+                        <span className={`flex-1 text-sm ${subtask.completed ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-slate-700 dark:text-slate-300'}`}>
+                          {subtask.text}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeSubtask(subtask.id)}
+                          className="text-slate-400 hover:text-rose-500 transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Comments Tab */}
           {activeTab === 'comments' && (
             <div className="p-4 flex flex-col h-full">
@@ -1089,14 +1510,14 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                       onChange={(e) => setNewComment(e.target.value)}
                       placeholder="Add a comment... (use @name to mention someone)"
                       rows={2}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none text-sm"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none text-sm dark:bg-slate-900 dark:text-slate-100"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                           handleAddComment();
                         }
                       }}
                     />
-                    <div className="absolute right-2 bottom-2 text-xs text-slate-400">
+                    <div className="absolute right-2 bottom-2 text-xs text-slate-400 dark:text-slate-500">
                       {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter to send
                     </div>
                   </div>
@@ -1117,19 +1538,19 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
               {/* Comments List */}
               <div className="flex-1 overflow-y-auto space-y-3">
                 {comments.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">
+                  <div className="text-center py-8 text-slate-400 dark:text-slate-500">
                     <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
                     <p className="text-sm">No comments yet</p>
                     <p className="text-xs mt-1">Add a comment to keep track of updates</p>
                   </div>
                 ) : (
                   [...comments].reverse().map(comment => (
-                    <div key={comment.id} className="bg-slate-50 rounded-lg p-3">
+                    <div key={comment.id} className="bg-slate-50 dark:bg-slate-900 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-slate-700">{comment.user}</span>
-                        <span className="text-xs text-slate-400">{formatTimestamp(comment.timestamp)}</span>
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{comment.user}</span>
+                        <span className="text-xs text-slate-400 dark:text-slate-500">{formatTimestamp(comment.timestamp)}</span>
                       </div>
-                      <p className="text-sm text-slate-600">{renderCommentText(comment.text)}</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">{renderCommentText(comment.text)}</p>
                     </div>
                   ))
                 )}
@@ -1141,7 +1562,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
           {activeTab === 'activity' && (
             <div className="p-4">
               {activity.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
+                <div className="text-center py-8 text-slate-400 dark:text-slate-500">
                   <History size={32} className="mx-auto mb-2 opacity-50" />
                   <p className="text-sm">No activity yet</p>
                   <p className="text-xs mt-1">Changes to this task will appear here</p>
@@ -1150,19 +1571,19 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                 <div className="space-y-3">
                   {[...activity].reverse().map(item => (
                     <div key={item.id} className="flex gap-3 text-sm">
-                      <div className="flex-shrink-0 w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center">
+                      <div className="flex-shrink-0 w-8 h-8 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center">
                         {item.type === 'comment' ? (
-                          <MessageSquare size={14} className="text-slate-500" />
+                          <MessageSquare size={14} className="text-slate-500 dark:text-slate-400" />
                         ) : (
-                          <History size={14} className="text-slate-500" />
+                          <History size={14} className="text-slate-500 dark:text-slate-400" />
                         )}
                       </div>
                       <div className="flex-1 pt-1">
-                        <p className="text-slate-600">
-                          <span className="font-medium text-slate-700">{item.user}</span>
+                        <p className="text-slate-600 dark:text-slate-300">
+                          <span className="font-medium text-slate-700 dark:text-slate-200">{item.user}</span>
                           {' '}{getActivityDescription(item)}
                         </p>
-                        <p className="text-xs text-slate-400 mt-0.5">{formatTimestamp(item.timestamp)}</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{formatTimestamp(item.timestamp)}</p>
                       </div>
                     </div>
                   ))}
@@ -1224,18 +1645,18 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-slate-200">
-          <h2 className="text-lg font-semibold text-slate-800">Add Task to {columnName}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Add Task to {columnName}</h2>
+          <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
             <X size={20} />
           </button>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-140px)]">
           {/* Task Description */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Task Description <span className="text-rose-500">*</span>
             </label>
             <textarea
@@ -1245,13 +1666,13 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
               required
               autoFocus
               placeholder="What needs to be done?"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none dark:bg-slate-900 dark:text-slate-100"
             />
           </div>
 
           {/* Owner */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Owner / Assigned To
             </label>
             <input
@@ -1259,20 +1680,20 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
               value={formData.owner}
               onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
               placeholder="Me, John, Sarah, etc."
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
             />
           </div>
 
           {/* Type and Person */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Type
               </label>
               <select
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
               >
                 <option value="action">Action</option>
                 <option value="follow-up">Follow-up</option>
@@ -1280,7 +1701,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
             </div>
             {formData.type === 'follow-up' && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Follow-up With
                 </label>
                 <input
@@ -1288,7 +1709,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
                   value={formData.person}
                   onChange={(e) => setFormData({ ...formData, person: e.target.value })}
                   placeholder="Person name"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
                 />
               </div>
             )}
@@ -1297,24 +1718,24 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
           {/* Due Date and Priority */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Due Date
               </label>
               <input
                 type="date"
                 value={formData.dueDate}
                 onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Priority
               </label>
               <select
                 value={formData.priority}
                 onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-slate-900 dark:text-slate-100"
               >
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
@@ -1325,7 +1746,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
 
           {/* Context */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Context / Notes
             </label>
             <textarea
@@ -1333,7 +1754,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
               onChange={(e) => setFormData({ ...formData, context: e.target.value })}
               rows={2}
               placeholder="Additional context about this task..."
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none dark:bg-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -1342,7 +1763,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium"
+              className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 font-medium"
             >
               Cancel
             </button>
@@ -1390,19 +1811,19 @@ function SearchInput({ value, onChange, resultCount }) {
 
   return (
     <div className="relative">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} />
       <input
         ref={inputRef}
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={value ? `${resultCount} results` : "Search tasks... (\u2318K)"}
-        className="pl-9 pr-8 py-1.5 w-64 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+        className="pl-9 pr-8 py-1.5 w-64 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder-slate-400 dark:placeholder-slate-500"
       />
       {value && (
         <button
           onClick={() => onChange('')}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
         >
           <X size={14} />
         </button>
@@ -1433,6 +1854,79 @@ export default function MeetingKanban() {
   const [processingInBackground, setProcessingInBackground] = useState(false);
   const [canNotify, setCanNotify] = useState(false);
   const processingDataRef = useRef(null);
+
+  // New state for features
+  const [theme, setTheme] = useState('system'); // 'light', 'dark', 'system'
+  const [tagFilter, setTagFilter] = useState([]); // Array of tags to filter by
+  const [dueDateFilter, setDueDateFilter] = useState(null); // 'overdue', 'today', 'this-week', 'upcoming', null
+  const [viewDensity, setViewDensity] = useState('normal'); // 'compact', 'normal', 'spacious'
+
+  // Initialize theme from localStorage and system preference
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    const savedDensity = localStorage.getItem('viewDensity') || 'normal';
+    setTheme(savedTheme);
+    setViewDensity(savedDensity);
+
+    // Apply theme
+    applyTheme(savedTheme);
+
+    // Listen for system preference changes
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => {
+      if (savedTheme === 'system') {
+        applyTheme('system');
+      }
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  const applyTheme = (themeValue) => {
+    const isDark = themeValue === 'dark' ||
+      (themeValue === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
+
+  const changeTheme = (newTheme) => {
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    applyTheme(newTheme);
+  };
+
+  const changeViewDensity = (density) => {
+    setViewDensity(density);
+    localStorage.setItem('viewDensity', density);
+  };
+
+  // Check for overdue tasks and send notification on page load
+  useEffect(() => {
+    const lastNotified = localStorage.getItem('lastOverdueNotification');
+    const today = new Date().toDateString();
+
+    if (lastNotified !== today && tasks.length > 0) {
+      const overdueTasks = tasks.filter(t => {
+        const dueDate = new Date(t.dueDate);
+        dueDate.setHours(0, 0, 0, 0);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        return dueDate < now && t.status !== 'done' && !t.archived && !t.deleted;
+      });
+
+      if (overdueTasks.length > 0 && canNotify) {
+        sendNotification(
+          'Overdue Tasks',
+          `You have ${overdueTasks.length} overdue task${overdueTasks.length > 1 ? 's' : ''} that need attention.`
+        );
+        localStorage.setItem('lastOverdueNotification', today);
+      }
+    }
+  }, [tasks, canNotify]);
 
   // Check notification permission on mount
   useEffect(() => {
@@ -1557,19 +2051,77 @@ export default function MeetingKanban() {
     setProcessingInBackground(true);
   };
 
-  const handleDrop = async (taskId, newStatus) => {
+  const handleDrop = async (taskId, newStatus, targetIndex) => {
+    // Get tasks in the target column, sorted by current order
+    const columnTasks = tasks
+      .filter(t => t.status === newStatus && t.id !== taskId && !t.deleted)
+      .sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER);
+      });
+
+    // Insert at target position
+    const updatedTasks = [...columnTasks];
+    const movingTask = tasks.find(t => t.id === taskId);
+    if (targetIndex !== undefined && targetIndex >= 0) {
+      updatedTasks.splice(targetIndex, 0, { ...movingTask, status: newStatus });
+    } else {
+      updatedTasks.push({ ...movingTask, status: newStatus });
+    }
+
+    // Recalculate order values
+    const updates = updatedTasks.map((t, idx) => ({ id: t.id, order: idx }));
+
+    // Optimistic update
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        const newOrder = updates.find(u => u.id === taskId)?.order ?? t.order;
+        return { ...t, status: newStatus, order: newOrder };
+      }
+      const orderUpdate = updates.find(u => u.id === t.id);
+      if (orderUpdate) {
+        return { ...t, order: orderUpdate.order };
+      }
+      return t;
+    }));
+
+    try {
+      // Update the dragged task's status
+      await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, order: updates.find(u => u.id === taskId)?.order })
+      });
+
+      // Bulk update order for all tasks in the column
+      if (updates.length > 1) {
+        await fetch('/api/tasks/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reorder', updates })
+        });
+      }
+    } catch (err) {
+      console.error('Failed to update task:', err);
+    }
+  };
+
+  const handlePinTask = async (taskId, pinned) => {
+    // Optimistic update
     setTasks(prev => prev.map(t =>
-      t.id === taskId ? { ...t, status: newStatus } : t
+      t.id === taskId ? { ...t, pinned, pinnedAt: pinned ? new Date().toISOString() : null } : t
     ));
 
     try {
       await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify({ pinned })
       });
     } catch (err) {
-      console.error('Failed to update task:', err);
+      console.error('Failed to pin task:', err);
+      fetchData();
     }
   };
 
@@ -1872,6 +2424,41 @@ export default function MeetingKanban() {
     if (view === 'follow-ups' && t.type !== 'follow-up') return false;
     if (view === 'actions' && t.type !== 'action') return false;
 
+    // Tag filter
+    if (tagFilter.length > 0) {
+      const taskTags = t.tags || [];
+      if (!tagFilter.some(tag => taskTags.includes(tag))) {
+        return false;
+      }
+    }
+
+    // Due date filter
+    if (dueDateFilter) {
+      const dueDate = new Date(t.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+
+      switch (dueDateFilter) {
+        case 'overdue':
+          if (dueDate >= today || t.status === 'done') return false;
+          break;
+        case 'today':
+          if (dueDate.getTime() !== today.getTime()) return false;
+          break;
+        case 'this-week':
+          if (dueDate < today || dueDate > nextWeek) return false;
+          break;
+        case 'upcoming':
+          if (dueDate < today) return false;
+          break;
+      }
+    }
+
     // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -1883,7 +2470,8 @@ export default function MeetingKanban() {
         t.person,
         t.context,
         meeting?.title,
-        meeting?.participants?.join(' ')
+        meeting?.participants?.join(' '),
+        ...(t.tags || [])
       ].filter(Boolean).join(' ').toLowerCase();
 
       if (!searchFields.includes(query)) {
@@ -1921,36 +2509,89 @@ export default function MeetingKanban() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4">
+      <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Meeting Actions</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Extract and track action items from your meetings</p>
+            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Meeting Actions</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Extract and track action items from your meetings</p>
           </div>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-4 text-sm">
               <div className="text-center">
-                <div className="text-2xl font-bold text-indigo-600">{stats.mine}</div>
-                <div className="text-xs text-slate-500">My Tasks</div>
+                <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{stats.mine}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">My Tasks</div>
               </div>
               {columnStats.map(col => (
                 <div key={col.id} className="text-center">
-                  <div className={`text-2xl font-bold ${statColors[col.color] || 'text-slate-800'}`}>{col.count}</div>
-                  <div className="text-xs text-slate-500">{col.label}</div>
+                  <div className={`text-2xl font-bold ${statColors[col.color] || 'text-slate-800 dark:text-slate-200'}`}>{col.count}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">{col.label}</div>
                 </div>
               ))}
               {stats.overdue > 0 && (
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-rose-600">{stats.overdue}</div>
-                  <div className="text-xs text-slate-500">Overdue</div>
+                  <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">{stats.overdue}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Overdue</div>
                 </div>
               )}
             </div>
+
+            {/* View Density Selector */}
+            <div className="relative group">
+              <button
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                title="View Density"
+              >
+                {viewDensity === 'compact' ? <Rows4 size={20} /> : viewDensity === 'spacious' ? <LayoutList size={20} /> : <Rows3 size={20} />}
+              </button>
+              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[140px]">
+                {[
+                  { id: 'compact', label: 'Compact', icon: Rows4 },
+                  { id: 'normal', label: 'Normal', icon: Rows3 },
+                  { id: 'spacious', label: 'Spacious', icon: LayoutList },
+                ].map(option => (
+                  <button
+                    key={option.id}
+                    onClick={() => changeViewDensity(option.id)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm ${viewDensity === option.id ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'} first:rounded-t-lg last:rounded-b-lg`}
+                  >
+                    <option.icon size={16} />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Theme Toggle */}
+            <div className="relative group">
+              <button
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                title="Theme"
+              >
+                {theme === 'dark' ? <Moon size={20} /> : theme === 'light' ? <Sun size={20} /> : <Monitor size={20} />}
+              </button>
+              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[120px]">
+                {[
+                  { id: 'light', label: 'Light', icon: Sun },
+                  { id: 'dark', label: 'Dark', icon: Moon },
+                  { id: 'system', label: 'System', icon: Monitor },
+                ].map(option => (
+                  <button
+                    key={option.id}
+                    onClick={() => changeTheme(option.id)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm ${theme === option.id ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'} first:rounded-t-lg last:rounded-b-lg`}
+                  >
+                    <option.icon size={16} />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <button
               onClick={fetchData}
-              className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+              className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
               title="Refresh"
             >
               <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
@@ -1961,7 +2602,7 @@ export default function MeetingKanban() {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-80 border-r border-slate-200 bg-white p-4 min-h-[calc(100vh-73px)]">
+        <aside className="w-80 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 min-h-[calc(100vh-73px)]">
           {/* Add Meeting Button */}
           <button
             onClick={() => setShowPasteModal(true)}
@@ -1970,27 +2611,27 @@ export default function MeetingKanban() {
             <Plus size={18} />
             Add Meeting Transcript
           </button>
-          
+
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-slate-700">Meetings</h2>
+            <h2 className="font-semibold text-slate-700 dark:text-slate-200">Meetings</h2>
           </div>
 
           <div className="space-y-2 mb-4">
             <button
               onClick={() => setSelectedMeeting(null)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${!selectedMeeting ? 'bg-indigo-100 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${!selectedMeeting ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-medium' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
             >
               All Meetings ({meetings.length})
             </button>
           </div>
 
           {loading && meetings.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
+            <div className="text-center py-8 text-slate-400 dark:text-slate-500">
               <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
               <p className="text-sm">Loading...</p>
             </div>
           ) : meetings.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
+            <div className="text-center py-8 text-slate-400 dark:text-slate-500">
               <FileText size={32} className="mx-auto mb-2 opacity-50" />
               <p className="text-sm mb-2">No meetings yet</p>
               <p className="text-xs">Click "Add Meeting Transcript" to get started</p>
@@ -2018,7 +2659,7 @@ export default function MeetingKanban() {
               {meetings.some(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0) && (
                 <button
                   onClick={() => setShowEmptyMeetings(!showEmptyMeetings)}
-                  className="w-full text-xs text-slate-400 hover:text-slate-600 py-2 flex items-center justify-center gap-1"
+                  className="w-full text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400 py-2 flex items-center justify-center gap-1"
                 >
                   {showEmptyMeetings ? (
                     <>Hide empty meetings</>
@@ -2029,13 +2670,13 @@ export default function MeetingKanban() {
               )}
             </div>
           )}
-          
+
           {/* Archive & Trash section */}
-          <div className="mt-6 pt-4 border-t border-slate-200">
+          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-slate-600">Archive</h3>
+              <h3 className="text-sm font-medium text-slate-600 dark:text-slate-300">Archive</h3>
               {stats.archived > 0 && (
-                <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full">
                   {stats.archived}
                 </span>
               )}
@@ -2044,7 +2685,7 @@ export default function MeetingKanban() {
               <button
                 onClick={handleArchiveDone}
                 disabled={(columnStats.find(c => c.id === 'done')?.count || 0) === 0}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Archive size={16} />
                 Archive completed ({columnStats.find(c => c.id === 'done')?.count || 0})
@@ -2054,7 +2695,7 @@ export default function MeetingKanban() {
                   setShowArchived(!showArchived);
                   if (showTrash) setShowTrash(false);
                 }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showArchived ? 'bg-amber-100 text-amber-700' : 'text-slate-600 hover:bg-slate-100'}`}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showArchived ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
               >
                 <FileText size={16} />
                 {showArchived ? 'Show active tasks' : 'View archived'}
@@ -2063,9 +2704,9 @@ export default function MeetingKanban() {
 
             {/* Trash */}
             <div className="flex items-center justify-between mb-3 mt-4">
-              <h3 className="text-sm font-medium text-slate-600">Trash</h3>
+              <h3 className="text-sm font-medium text-slate-600 dark:text-slate-300">Trash</h3>
               {stats.trash > 0 && (
-                <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                <span className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full">
                   {stats.trash}
                 </span>
               )}
@@ -2076,7 +2717,7 @@ export default function MeetingKanban() {
                   setShowTrash(!showTrash);
                   if (showArchived) setShowArchived(false);
                 }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showTrash ? 'bg-rose-100 text-rose-700' : 'text-slate-600 hover:bg-slate-100'}`}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showTrash ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
               >
                 <Trash2 size={16} />
                 {showTrash ? 'Back to tasks' : `View trash${stats.trash > 0 ? ` (${stats.trash})` : ''}`}
@@ -2088,67 +2729,120 @@ export default function MeetingKanban() {
         {/* Main Content */}
         <main className="flex-1 p-6 overflow-x-auto">
           {/* Filters */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <SearchInput
-                value={searchQuery}
-                onChange={setSearchQuery}
-                resultCount={filteredTasks.length}
-              />
-              <div className="w-px h-6 bg-slate-200" />
-              <span className="text-sm text-slate-500">Show:</span>
+          <div className="flex flex-col gap-3 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 flex-wrap">
+                <SearchInput
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  resultCount={filteredTasks.length}
+                />
+                <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
+                <span className="text-sm text-slate-500 dark:text-slate-400">Show:</span>
+                {[
+                  { id: 'all', label: 'All Items' },
+                  { id: 'mine', label: 'My Tasks' },
+                  { id: 'actions', label: 'Actions' },
+                  { id: 'follow-ups', label: 'Follow-ups' },
+                ].map(filter => (
+                  <button
+                    key={filter.id}
+                    onClick={() => setView(filter.id)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${view === filter.id ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-medium' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'}`}
+                  >
+                    {filter.label}
+                    {filter.id === 'mine' && (
+                      <span className="ml-1 text-xs">({stats.mine})</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setShowColumnModal(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <Plus size={16} />
+                Add Column
+              </button>
+            </div>
+
+            {/* Second row: Due date filters and tag filters */}
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Due Date Quick Filters */}
+              <span className="text-sm text-slate-500 dark:text-slate-400">Due:</span>
               {[
-                { id: 'all', label: 'All Items' },
-                { id: 'mine', label: 'My Tasks' },
-                { id: 'actions', label: 'Actions' },
-                { id: 'follow-ups', label: 'Follow-ups' },
+                { id: 'overdue', label: 'Overdue', color: 'rose' },
+                { id: 'today', label: 'Today', color: 'amber' },
+                { id: 'this-week', label: 'This Week', color: 'blue' },
+                { id: 'upcoming', label: 'Upcoming', color: 'slate' },
               ].map(filter => (
                 <button
                   key={filter.id}
-                  onClick={() => setView(filter.id)}
-                  className={`px-3 py-1.5 rounded-full text-sm transition-colors ${view === filter.id ? 'bg-indigo-100 text-indigo-700 font-medium' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'}`}
+                  onClick={() => setDueDateFilter(dueDateFilter === filter.id ? null : filter.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                    dueDateFilter === filter.id
+                      ? filter.color === 'rose' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 font-medium'
+                      : filter.color === 'amber' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium'
+                      : filter.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium'
+                      : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                  }`}
                 >
                   {filter.label}
-                  {filter.id === 'mine' && (
-                    <span className="ml-1 text-xs">({stats.mine})</span>
-                  )}
                 </button>
               ))}
-              
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="ml-2 px-3 py-1.5 rounded-full text-sm bg-indigo-100 text-indigo-700 font-medium flex items-center gap-1"
-                >
-                  "{searchQuery.slice(0, 15)}{searchQuery.length > 15 ? '...' : ''}"
-                  <X size={14} />
-                </button>
-              )}
 
-              {selectedMeeting && (
-                <button
-                  onClick={() => setSelectedMeeting(null)}
-                  className="ml-2 px-3 py-1.5 rounded-full text-sm bg-amber-100 text-amber-700 font-medium flex items-center gap-1"
-                >
-                  {meetings.find(m => m.id === selectedMeeting)?.title?.slice(0, 20)}...
-                  <X size={14} />
-                </button>
-              )}
+              <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
 
-              {showArchived && (
-                <span className="ml-2 px-3 py-1.5 rounded-full text-sm bg-slate-200 text-slate-600 font-medium">
-                  Viewing Archived
-                </span>
+              {/* Tag Filters */}
+              <span className="text-sm text-slate-500 dark:text-slate-400">Tags:</span>
+              {PREDEFINED_TAGS.slice(0, 4).map(tag => (
+                <button
+                  key={tag}
+                  onClick={() => setTagFilter(tagFilter.includes(tag) ? tagFilter.filter(t => t !== tag) : [...tagFilter, tag])}
+                  className={`px-2 py-1 rounded-full text-xs transition-colors ${
+                    tagFilter.includes(tag)
+                      ? `${TAG_COLORS[tag]?.bg || TAG_COLORS.default.bg} ${TAG_COLORS[tag]?.text || TAG_COLORS.default.text} font-medium`
+                      : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                  }`}
+                >
+                  #{tag}
+                </button>
+              ))}
+
+              {/* Active filters display */}
+              {(searchQuery || selectedMeeting || showArchived || tagFilter.length > 0 || dueDateFilter) && (
+                <>
+                  <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="px-3 py-1 rounded-full text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-medium flex items-center gap-1"
+                    >
+                      "{searchQuery.slice(0, 15)}{searchQuery.length > 15 ? '...' : ''}"
+                      <X size={12} />
+                    </button>
+                  )}
+
+                  {selectedMeeting && (
+                    <button
+                      onClick={() => setSelectedMeeting(null)}
+                      className="px-3 py-1 rounded-full text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1"
+                    >
+                      {meetings.find(m => m.id === selectedMeeting)?.title?.slice(0, 20)}...
+                      <X size={12} />
+                    </button>
+                  )}
+
+                  {showArchived && (
+                    <span className="px-3 py-1 rounded-full text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium">
+                      Viewing Archived
+                    </span>
+                  )}
+                </>
               )}
             </div>
-            
-            <button
-              onClick={() => setShowColumnModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-            >
-              <Plus size={16} />
-              Add Column
-            </button>
           </div>
 
           {/* Kanban Board */}
@@ -2171,12 +2865,14 @@ export default function MeetingKanban() {
                   isTrashView={showTrash}
                   onRestoreTask={handleRestoreTask}
                   onPermanentDelete={handlePermanentDelete}
+                  onPinTask={handlePinTask}
+                  viewDensity={viewDensity}
                 />
                 {/* Delete column button for custom columns */}
                 {column.custom && (
                   <button
                     onClick={() => handleDeleteColumn(column.id)}
-                    className="absolute top-2 right-2 p-1 text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-2 right-2 p-1 text-slate-400 dark:text-slate-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Delete column"
                   >
                     <Trash2 size={14} />
@@ -2187,7 +2883,7 @@ export default function MeetingKanban() {
           </div>
 
           {error && (
-            <div className="mt-4 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+            <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg text-rose-700 dark:text-rose-400 text-sm">
               {error}
             </div>
           )}

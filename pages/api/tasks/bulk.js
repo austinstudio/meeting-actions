@@ -72,16 +72,38 @@ export default async function handler(req, res) {
         const originalCount = tasks.length;
         tasks = tasks.filter(t => !t.archived);
         const deletedCount = originalCount - tasks.length;
-        
+
         await kv.set('tasks', tasks);
-        
-        return res.status(200).json({ 
-          success: true, 
+
+        return res.status(200).json({
+          success: true,
           deletedCount,
           message: `Permanently deleted ${deletedCount} archived tasks`
         });
       }
-      
+
+      if (action === 'reorder') {
+        // Bulk reorder tasks within a column
+        const { updates } = req.body; // Array of { id, order }
+        if (!Array.isArray(updates)) {
+          return res.status(400).json({ error: 'Updates array required' });
+        }
+
+        updates.forEach(({ id, order }) => {
+          const taskIndex = tasks.findIndex(t => t.id === id);
+          if (taskIndex !== -1) {
+            tasks[taskIndex].order = order;
+          }
+        });
+
+        await kv.set('tasks', tasks);
+
+        return res.status(200).json({
+          success: true,
+          message: `Reordered ${updates.length} tasks`
+        });
+      }
+
       return res.status(400).json({ error: 'Unknown action' });
       
     } catch (error) {

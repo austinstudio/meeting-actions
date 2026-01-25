@@ -111,7 +111,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'PATCH') {
     try {
-      const { status, priority, archived, column, task, owner, person, dueDate, context, type } = req.body;
+      const { status, priority, archived, column, task, owner, person, dueDate, context, type, tags, subtasks, pinned, order } = req.body;
 
       // Get current tasks from KV
       let tasks = await kv.get('tasks') || [];
@@ -171,6 +171,39 @@ export default async function handler(req, res) {
         }
       }
       if (column !== undefined) currentTask.column = column;
+
+      // Handle tags array
+      if (tags !== undefined) {
+        const oldTags = currentTask.tags || [];
+        const newTags = Array.isArray(tags) ? tags : [];
+        if (JSON.stringify(oldTags) !== JSON.stringify(newTags)) {
+          changes.push(createActivityEntry('update', 'tags', oldTags.join(', '), newTags.join(', ')));
+          currentTask.tags = newTags;
+        }
+      }
+
+      // Handle subtasks array
+      if (subtasks !== undefined) {
+        const oldSubtasks = currentTask.subtasks || [];
+        const newSubtasks = Array.isArray(subtasks) ? subtasks : [];
+        // Only log if count changed significantly
+        if (oldSubtasks.length !== newSubtasks.length) {
+          changes.push(createActivityEntry('update', 'subtasks', `${oldSubtasks.length} items`, `${newSubtasks.length} items`));
+        }
+        currentTask.subtasks = newSubtasks;
+      }
+
+      // Handle pinned status
+      if (pinned !== undefined && pinned !== currentTask.pinned) {
+        changes.push(createActivityEntry('update', 'pinned', currentTask.pinned ? 'yes' : 'no', pinned ? 'yes' : 'no'));
+        currentTask.pinned = pinned;
+        currentTask.pinnedAt = pinned ? new Date().toISOString() : null;
+      }
+
+      // Handle order for drag reorder
+      if (order !== undefined) {
+        currentTask.order = order;
+      }
 
       // Add all changes to activity log
       currentTask.activity.push(...changes);
