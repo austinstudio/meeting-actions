@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search } from 'lucide-react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell } from 'lucide-react';
 
 const DEFAULT_COLUMNS = [
   { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
@@ -150,7 +150,7 @@ function TaskCard({ task, meeting, onDelete, onEdit }) {
   );
 }
 
-function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn }) {
+function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isColumnDragOver, setIsColumnDragOver] = useState(false);
 
@@ -225,6 +225,14 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
         </div>
       </div>
       <div className="p-2 space-y-2 min-h-[400px] max-h-[calc(100vh-280px)] overflow-y-auto">
+        {/* Show skeletons when processing in background */}
+        {showSkeletons && column.id === 'uncategorized' && (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        )}
         {columnTasks.map(task => (
           <TaskCard
             key={task.id}
@@ -292,7 +300,68 @@ function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete }) {
   );
 }
 
-function PasteModal({ isOpen, onClose, onSubmit, isProcessing }) {
+function ProcessingOverlay({ onProcessInBackground, canNotify }) {
+  return (
+    <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center z-10 rounded-xl">
+      {/* AI Processing Animation */}
+      <div className="relative mb-6">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 animate-spin-slow opacity-20 absolute inset-0" />
+        <div className="w-20 h-20 rounded-full bg-gradient-to-bl from-indigo-500 via-purple-500 to-pink-500 animate-spin-slow-reverse opacity-20 absolute inset-0" />
+        <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center relative">
+          <Sparkles className="w-10 h-10 text-indigo-600 animate-pulse" />
+        </div>
+      </div>
+
+      <h3 className="text-lg font-semibold text-slate-800 mb-2">AI is analyzing your transcript</h3>
+      <p className="text-sm text-slate-500 mb-6 text-center max-w-xs">
+        Extracting action items, identifying owners, and setting priorities...
+      </p>
+
+      {/* Animated dots */}
+      <div className="flex gap-1 mb-6">
+        <div className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+        <div className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+        <div className="w-2 h-2 rounded-full bg-pink-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+      </div>
+
+      <button
+        onClick={onProcessInBackground}
+        className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+      >
+        <Bell size={16} />
+        {canNotify ? 'Process in background' : 'Enable notifications & continue'}
+      </button>
+    </div>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 p-3 animate-pulse">
+      <div className="flex items-center gap-1.5 mb-2">
+        <div className="w-3 h-3 rounded bg-indigo-200" />
+        <div className="h-3 bg-indigo-100 rounded w-24" />
+      </div>
+      <div className="flex items-start gap-2 mb-2">
+        <div className="w-4 h-4 rounded bg-slate-200 mt-0.5" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 bg-slate-200 rounded w-full" />
+          <div className="h-4 bg-slate-200 rounded w-3/4" />
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 mb-2 ml-6">
+        <div className="w-3 h-3 rounded bg-slate-200" />
+        <div className="h-3 bg-slate-100 rounded w-16" />
+      </div>
+      <div className="flex items-center justify-between ml-6">
+        <div className="h-5 bg-slate-100 rounded-full w-14" />
+        <div className="h-3 bg-slate-100 rounded w-12" />
+      </div>
+    </div>
+  );
+}
+
+function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackground, canNotify }) {
   const [title, setTitle] = useState('');
   const [transcript, setTranscript] = useState('');
 
@@ -321,14 +390,22 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden relative">
+        {/* Processing Overlay */}
+        {isProcessing && (
+          <ProcessingOverlay
+            onProcessInBackground={onProcessInBackground}
+            canNotify={canNotify}
+          />
+        )}
+
         <div className="flex items-center justify-between p-4 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-800">Add Meeting Transcript</h2>
-          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600">
+          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600" disabled={isProcessing}>
             <X size={20} />
           </button>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="p-4">
           <div className="mb-4">
             <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -340,9 +417,10 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing }) {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., Sprint Planning, Client Call, 1:1 with Sarah"
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              disabled={isProcessing}
             />
           </div>
-          
+
           <div className="mb-4">
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Transcript <span className="text-rose-500">*</span>
@@ -353,18 +431,20 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing }) {
               placeholder="Paste your meeting transcript here..."
               rows={12}
               required
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono text-sm"
+              disabled={isProcessing}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono text-sm disabled:bg-slate-50"
             />
             <p className="text-xs text-slate-400 mt-1">
               Paste the full transcript from Plaud. The AI will extract genuine action items and commitments.
             </p>
           </div>
-          
+
           <div className="flex justify-end gap-3">
             <button
               type="button"
               onClick={handleClose}
-              className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium"
+              disabled={isProcessing}
+              className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium disabled:opacity-50"
             >
               Cancel
             </button>
@@ -373,17 +453,8 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing }) {
               disabled={!transcript.trim() || isProcessing}
               className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {isProcessing ? (
-                <>
-                  <RefreshCw size={16} className="animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={16} />
-                  Extract Action Items
-                </>
-              )}
+              <Sparkles size={16} />
+              Extract Action Items
             </button>
           </div>
         </form>
@@ -947,6 +1018,37 @@ export default function MeetingKanban() {
   const [addingToColumn, setAddingToColumn] = useState(null);
   const [draggingColumn, setDraggingColumn] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [processingInBackground, setProcessingInBackground] = useState(false);
+  const [canNotify, setCanNotify] = useState(false);
+  const processingDataRef = useRef(null);
+
+  // Check notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      setCanNotify(Notification.permission === 'granted');
+    }
+  }, []);
+
+  // Request notification permission
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setCanNotify(permission === 'granted');
+      return permission === 'granted';
+    }
+    return false;
+  };
+
+  // Send browser notification
+  const sendNotification = (title, body) => {
+    if (canNotify && 'Notification' in window) {
+      new Notification(title, {
+        body,
+        icon: '/favicon.ico',
+        tag: 'meeting-actions'
+      });
+    }
+  };
 
   // Fetch data from API
   const fetchData = async () => {
@@ -979,7 +1081,10 @@ export default function MeetingKanban() {
   const handlePasteSubmit = async ({ title, transcript }) => {
     setIsProcessing(true);
     setError(null);
-    
+
+    // Store the request data in case we switch to background processing
+    processingDataRef.current = { title, transcript };
+
     try {
       const response = await fetch('/api/webhook', {
         method: 'POST',
@@ -990,22 +1095,54 @@ export default function MeetingKanban() {
           date: new Date().toISOString().split('T')[0]
         })
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setMeetings(prev => [data.meeting, ...prev]);
         setTasks(prev => [...data.tasks, ...prev]);
         setShowPasteModal(false);
+
+        // Send notification if processing was in background
+        if (processingInBackground) {
+          sendNotification(
+            'Meeting processed!',
+            `Extracted ${data.tasks.length} action items from "${data.meeting.title}"`
+          );
+        }
       } else {
         setError(data.error || 'Failed to process transcript');
+        if (processingInBackground) {
+          sendNotification('Processing failed', data.error || 'Failed to process transcript');
+        }
       }
     } catch (err) {
       setError('Failed to process transcript');
       console.error(err);
+      if (processingInBackground) {
+        sendNotification('Processing failed', 'Failed to process transcript');
+      }
     } finally {
       setIsProcessing(false);
+      setProcessingInBackground(false);
+      processingDataRef.current = null;
     }
+  };
+
+  // Handle switching to background processing
+  const handleProcessInBackground = async () => {
+    // Request notification permission if not already granted
+    if (!canNotify) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        // Still allow background processing, just won't get notification
+        console.log('Notifications not granted, continuing without');
+      }
+    }
+
+    // Close modal and show skeletons
+    setShowPasteModal(false);
+    setProcessingInBackground(true);
   };
 
   const handleDrop = async (taskId, newStatus) => {
@@ -1459,6 +1596,7 @@ export default function MeetingKanban() {
                   onColumnDragEnd={() => setDraggingColumn(null)}
                   onColumnDrop={handleColumnDrop}
                   isDraggingColumn={draggingColumn === column.id}
+                  showSkeletons={processingInBackground}
                 />
                 {/* Delete column button for custom columns */}
                 {column.custom && (
@@ -1488,6 +1626,8 @@ export default function MeetingKanban() {
         onClose={() => setShowPasteModal(false)}
         onSubmit={handlePasteSubmit}
         isProcessing={isProcessing}
+        onProcessInBackground={handleProcessInBackground}
+        canNotify={canNotify}
       />
       
       <AddColumnModal
