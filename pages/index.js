@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign } from 'lucide-react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle } from 'lucide-react';
 
 const DEFAULT_COLUMNS = [
   { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
@@ -39,12 +39,16 @@ const isCurrentUser = (name) => {
   return normalized === 'me' || normalized === 'corey';
 };
 
-function TaskCard({ task, meeting, onDelete, onEdit }) {
+function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onPermanentDelete }) {
   const [isDragging, setIsDragging] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [expandContext, setExpandContext] = useState(false);
 
   const handleDragStart = (e) => {
+    if (isTrashView) {
+      e.preventDefault();
+      return;
+    }
     setIsDragging(true);
     e.dataTransfer.setData('taskId', task.id);
   };
@@ -58,33 +62,60 @@ function TaskCard({ task, meeting, onDelete, onEdit }) {
 
   return (
     <div
-      draggable
+      draggable={!isTrashView}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className={`bg-white rounded-lg border border-slate-200 p-3 cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md transition-all relative group ${isDragging ? 'opacity-50 rotate-2' : ''}`}
+      className={`bg-white rounded-lg border border-slate-200 p-3 ${isTrashView ? 'cursor-default opacity-75' : 'cursor-grab active:cursor-grabbing'} shadow-sm hover:shadow-md transition-all relative group ${isDragging ? 'opacity-50 rotate-2' : ''}`}
     >
-      {/* Action buttons */}
+      {/* Action buttons - different for trash view */}
       <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit(task);
-          }}
-          className="p-1 text-slate-300 hover:text-indigo-500"
-          title="Edit task"
-        >
-          <Pencil size={14} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(task.id);
-          }}
-          className="p-1 text-slate-300 hover:text-rose-500"
-          title="Delete task"
-        >
-          <Trash2 size={14} />
-        </button>
+        {isTrashView ? (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRestore(task.id);
+              }}
+              className="p-1 text-slate-300 hover:text-emerald-500"
+              title="Restore task"
+            >
+              <RotateCcw size={14} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPermanentDelete(task.id);
+              }}
+              className="p-1 text-slate-300 hover:text-rose-500"
+              title="Delete permanently"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(task);
+              }}
+              className="p-1 text-slate-300 hover:text-indigo-500"
+              title="Edit task"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(task.id);
+              }}
+              className="p-1 text-slate-300 hover:text-rose-500"
+              title="Delete task"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        )}
       </div>
       
       {/* Meeting source tag */}
@@ -150,7 +181,7 @@ function TaskCard({ task, meeting, onDelete, onEdit }) {
   );
 }
 
-function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons }) {
+function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isColumnDragOver, setIsColumnDragOver] = useState(false);
 
@@ -240,6 +271,9 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
             meeting={meetings.find(m => m.id === task.meetingId)}
             onDelete={onDeleteTask}
             onEdit={onEditTask}
+            isTrashView={isTrashView}
+            onRestore={onRestoreTask}
+            onPermanentDelete={onPermanentDelete}
           />
         ))}
       </div>
@@ -664,24 +698,44 @@ function AddColumnModal({ isOpen, onClose, onSubmit }) {
   );
 }
 
-function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmLabel = "Delete", danger = true }) {
+function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmLabel = "Delete", danger = true, subMessage }) {
   if (!isOpen) return null;
-  
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold text-slate-800 mb-2">{title}</h2>
-        <p className="text-slate-600 mb-6">{message}</p>
-        <div className="flex justify-end gap-3">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="p-6">
+          <div className="flex items-start gap-4">
+            {danger && (
+              <div className="flex-shrink-0 w-10 h-10 bg-rose-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+            )}
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
+              <p className="text-slate-600 mt-1">{message}</p>
+              {subMessage && (
+                <p className="text-sm text-slate-500 mt-2 bg-slate-50 rounded-lg px-3 py-2">
+                  {subMessage}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 px-6 py-4 bg-slate-50 border-t border-slate-100">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium"
+            className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium rounded-lg hover:bg-slate-100 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 rounded-lg font-medium ${danger ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              danger
+                ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+            }`}
           >
             {confirmLabel}
           </button>
@@ -1356,6 +1410,7 @@ export default function MeetingKanban() {
   const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [view, setView] = useState('all');
   const [showArchived, setShowArchived] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showPasteModal, setShowPasteModal] = useState(false);
@@ -1509,15 +1564,84 @@ export default function MeetingKanban() {
     }
   };
 
-  const handleDeleteTask = async (taskId) => {
-    setTasks(prev => prev.filter(t => t.id !== taskId));
-    
+  const handleDeleteTask = (taskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Task',
+      message: `Are you sure you want to delete this task?`,
+      subMessage: task.task?.slice(0, 100) + (task.task?.length > 100 ? '...' : ''),
+      confirmLabel: 'Move to Trash',
+      onConfirm: async () => {
+        // Optimistic update - mark as deleted
+        setTasks(prev => prev.map(t =>
+          t.id === taskId ? { ...t, deleted: true, deletedAt: new Date().toISOString() } : t
+        ));
+
+        setConfirmModal({ isOpen: false });
+
+        try {
+          await fetch(`/api/tasks/${taskId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ permanent: false })
+          });
+        } catch (err) {
+          console.error('Failed to delete task:', err);
+          fetchData();
+        }
+      },
+      onCancel: () => setConfirmModal({ isOpen: false })
+    });
+  };
+
+  const handleRestoreTask = async (taskId) => {
+    // Optimistic update
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, deleted: false, deletedAt: null } : t
+    ));
+
     try {
-      await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+      await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restore: true })
+      });
     } catch (err) {
-      console.error('Failed to delete task:', err);
-      fetchData(); // Refresh on error
+      console.error('Failed to restore task:', err);
+      fetchData();
     }
+  };
+
+  const handlePermanentDelete = (taskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Permanently Delete',
+      message: 'This will permanently delete the task. This action cannot be undone.',
+      subMessage: task.task?.slice(0, 100) + (task.task?.length > 100 ? '...' : ''),
+      confirmLabel: 'Delete Forever',
+      onConfirm: async () => {
+        setTasks(prev => prev.filter(t => t.id !== taskId));
+        setConfirmModal({ isOpen: false });
+
+        try {
+          await fetch(`/api/tasks/${taskId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ permanent: true })
+          });
+        } catch (err) {
+          console.error('Failed to permanently delete task:', err);
+          fetchData();
+        }
+      },
+      onCancel: () => setConfirmModal({ isOpen: false })
+    });
   };
 
   const handleEditTask = async (taskId, updatedData) => {
@@ -1719,6 +1843,14 @@ export default function MeetingKanban() {
 
   // Filter tasks
   const filteredTasks = tasks.filter(t => {
+    // Trash filter - if viewing trash, only show deleted tasks
+    if (showTrash) {
+      return t.deleted === true;
+    }
+
+    // Exclude deleted tasks from normal views
+    if (t.deleted) return false;
+
     // Archived filter
     if (!showArchived && t.archived) return false;
     if (showArchived && !t.archived) return false;
@@ -1754,16 +1886,17 @@ export default function MeetingKanban() {
   });
 
   const stats = {
-    total: tasks.filter(t => !t.archived).length,
-    mine: tasks.filter(t => isCurrentUser(t.owner) && !t.archived).length,
-    overdue: tasks.filter(t => new Date(t.dueDate) < new Date() && t.status !== 'done' && !t.archived).length,
-    archived: tasks.filter(t => t.archived).length,
+    total: tasks.filter(t => !t.archived && !t.deleted).length,
+    mine: tasks.filter(t => isCurrentUser(t.owner) && !t.archived && !t.deleted).length,
+    overdue: tasks.filter(t => new Date(t.dueDate) < new Date() && t.status !== 'done' && !t.archived && !t.deleted).length,
+    archived: tasks.filter(t => t.archived && !t.deleted).length,
+    trash: tasks.filter(t => t.deleted).length,
   };
 
   // Build column stats dynamically
   const columnStats = columns.sort((a, b) => a.order - b.order).map(col => ({
     ...col,
-    count: tasks.filter(t => t.status === col.id && !t.archived).length
+    count: tasks.filter(t => t.status === col.id && !t.archived && !t.deleted).length
   }));
 
   // Color mapping for stats display
@@ -1868,7 +2001,7 @@ export default function MeetingKanban() {
             </div>
           )}
           
-          {/* Archive section */}
+          {/* Archive & Trash section */}
           <div className="mt-6 pt-4 border-t border-slate-200">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-slate-600">Archive</h3>
@@ -1888,11 +2021,36 @@ export default function MeetingKanban() {
                 Archive completed ({columnStats.find(c => c.id === 'done')?.count || 0})
               </button>
               <button
-                onClick={() => setShowArchived(!showArchived)}
+                onClick={() => {
+                  setShowArchived(!showArchived);
+                  if (showTrash) setShowTrash(false);
+                }}
                 className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showArchived ? 'bg-amber-100 text-amber-700' : 'text-slate-600 hover:bg-slate-100'}`}
               >
                 <FileText size={16} />
                 {showArchived ? 'Show active tasks' : 'View archived'}
+              </button>
+            </div>
+
+            {/* Trash */}
+            <div className="flex items-center justify-between mb-3 mt-4">
+              <h3 className="text-sm font-medium text-slate-600">Trash</h3>
+              {stats.trash > 0 && (
+                <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                  {stats.trash}
+                </span>
+              )}
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  setShowTrash(!showTrash);
+                  if (showArchived) setShowArchived(false);
+                }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showTrash ? 'bg-rose-100 text-rose-700' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                <Trash2 size={16} />
+                {showTrash ? 'Back to tasks' : `View trash${stats.trash > 0 ? ` (${stats.trash})` : ''}`}
               </button>
             </div>
           </div>
@@ -1981,6 +2139,9 @@ export default function MeetingKanban() {
                   onColumnDrop={handleColumnDrop}
                   isDraggingColumn={draggingColumn === column.id}
                   showSkeletons={processingInBackground}
+                  isTrashView={showTrash}
+                  onRestoreTask={handleRestoreTask}
+                  onPermanentDelete={handlePermanentDelete}
                 />
                 {/* Delete column button for custom columns */}
                 {column.custom && (

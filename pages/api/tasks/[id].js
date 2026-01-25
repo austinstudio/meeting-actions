@@ -198,25 +198,76 @@ export default async function handler(req, res) {
 
   if (req.method === 'DELETE') {
     try {
+      const { permanent } = req.body || {};
+
       // Get current tasks from KV
       let tasks = await kv.get('tasks') || [];
 
-      // Check if task exists
-      const task = tasks.find(t => t.id === id);
-      if (!task) {
+      // Find the task
+      const taskIndex = tasks.findIndex(t => t.id === id);
+      if (taskIndex === -1) {
         return res.status(404).json({ error: 'Task not found' });
       }
 
-      // Remove the task
-      tasks = tasks.filter(t => t.id !== id);
+      if (permanent) {
+        // Permanently delete
+        tasks = tasks.filter(t => t.id !== id);
+      } else {
+        // Soft delete - move to trash
+        tasks[taskIndex].deleted = true;
+        tasks[taskIndex].deletedAt = new Date().toISOString();
+
+        // Add activity entry
+        if (!tasks[taskIndex].activity) tasks[taskIndex].activity = [];
+        tasks[taskIndex].activity.push(
+          createActivityEntry('delete', null, null, 'moved to trash')
+        );
+      }
 
       // Save back to KV
       await kv.set('tasks', tasks);
 
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true, task: tasks[taskIndex] });
     } catch (error) {
       console.error('Task delete error:', error);
       return res.status(500).json({ error: 'Failed to delete task' });
+    }
+  }
+
+  // PUT - Restore a deleted task
+  if (req.method === 'PUT') {
+    try {
+      const { restore } = req.body;
+
+      if (!restore) {
+        return res.status(400).json({ error: 'Invalid request' });
+      }
+
+      let tasks = await kv.get('tasks') || [];
+      const taskIndex = tasks.findIndex(t => t.id === id);
+
+      if (taskIndex === -1) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
+
+      // Restore the task
+      tasks[taskIndex].deleted = false;
+      tasks[taskIndex].deletedAt = null;
+
+      // Add activity entry
+      if (!tasks[taskIndex].activity) tasks[taskIndex].activity = [];
+      tasks[taskIndex].activity.push(
+        createActivityEntry('restore', null, null, 'restored from trash')
+      );
+
+      tasks[taskIndex].updatedAt = new Date().toISOString();
+
+      await kv.set('tasks', tasks);
+
+      return res.status(200).json({ success: true, task: tasks[taskIndex] });
+    } catch (error) {
+      console.error('Task restore error:', error);
+      return res.status(500).json({ error: 'Failed to restore task' });
     }
   }
 
