@@ -281,21 +281,29 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
   );
 }
 
-function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete }) {
+function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, isEmpty }) {
   const [showDelete, setShowDelete] = useState(false);
-  
+
   return (
     <div
-      className={`relative w-full text-left p-3 rounded-lg border transition-all ${isSelected ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+      className={`relative w-full text-left p-3 rounded-lg border transition-all ${
+        isSelected
+          ? 'bg-indigo-50 border-indigo-200'
+          : isEmpty
+            ? 'bg-slate-50 border-slate-100 opacity-60'
+            : 'bg-white border-slate-200 hover:border-slate-300'
+      }`}
       onMouseEnter={() => setShowDelete(true)}
       onMouseLeave={() => setShowDelete(false)}
     >
       <button onClick={onClick} className="w-full text-left">
         <div className="flex items-start justify-between gap-2">
-          <h4 className="font-medium text-slate-800 text-sm leading-snug pr-6">{meeting.title}</h4>
-          <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full whitespace-nowrap">
-            {taskCount} items
-          </span>
+          <h4 className={`font-medium text-sm leading-snug pr-6 ${isEmpty ? 'text-slate-500' : 'text-slate-800'}`}>{meeting.title}</h4>
+          {taskCount > 0 && (
+            <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full whitespace-nowrap">
+              {taskCount} items
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
           <span className="flex items-center gap-1">
@@ -1411,6 +1419,7 @@ export default function MeetingKanban() {
   const [view, setView] = useState('all');
   const [showArchived, setShowArchived] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
+  const [showEmptyMeetings, setShowEmptyMeetings] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showPasteModal, setShowPasteModal] = useState(false);
@@ -1988,16 +1997,36 @@ export default function MeetingKanban() {
             </div>
           ) : (
             <div className="space-y-2 max-h-[calc(100vh-400px)] overflow-y-auto">
-              {meetings.map(meeting => (
-                <MeetingCard
-                  key={meeting.id}
-                  meeting={meeting}
-                  taskCount={tasks.filter(t => t.meetingId === meeting.id && !t.archived).length}
-                  isSelected={selectedMeeting === meeting.id}
-                  onClick={() => setSelectedMeeting(meeting.id === selectedMeeting ? null : meeting.id)}
-                  onDelete={handleDeleteMeeting}
-                />
-              ))}
+              {meetings
+                .map(meeting => ({
+                  ...meeting,
+                  taskCount: tasks.filter(t => t.meetingId === meeting.id && !t.archived && !t.deleted).length
+                }))
+                .filter(meeting => showEmptyMeetings || meeting.taskCount > 0)
+                .map(meeting => (
+                  <MeetingCard
+                    key={meeting.id}
+                    meeting={meeting}
+                    taskCount={meeting.taskCount}
+                    isSelected={selectedMeeting === meeting.id}
+                    onClick={() => setSelectedMeeting(meeting.id === selectedMeeting ? null : meeting.id)}
+                    onDelete={handleDeleteMeeting}
+                    isEmpty={meeting.taskCount === 0}
+                  />
+                ))}
+              {/* Show empty meetings toggle */}
+              {meetings.some(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0) && (
+                <button
+                  onClick={() => setShowEmptyMeetings(!showEmptyMeetings)}
+                  className="w-full text-xs text-slate-400 hover:text-slate-600 py-2 flex items-center justify-center gap-1"
+                >
+                  {showEmptyMeetings ? (
+                    <>Hide empty meetings</>
+                  ) : (
+                    <>Show {meetings.filter(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0).length} empty meetings</>
+                  )}
+                </button>
+              )}
             </div>
           )}
           
