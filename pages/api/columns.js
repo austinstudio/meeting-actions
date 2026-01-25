@@ -28,6 +28,15 @@ export default async function handler(req, res) {
         // Initialize with default columns
         await kv.set('columns', DEFAULT_COLUMNS);
         columns = DEFAULT_COLUMNS;
+      } else {
+        // Ensure 'uncategorized' column exists (for existing users)
+        const hasUncategorized = columns.some(c => c.id === 'uncategorized');
+        if (!hasUncategorized) {
+          // Add uncategorized at the beginning, shift other orders
+          columns = columns.map(c => ({ ...c, order: c.order + 1 }));
+          columns.unshift({ id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 });
+          await kv.set('columns', columns);
+        }
       }
       return res.status(200).json({ columns });
     } catch (error) {
