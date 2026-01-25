@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell } from 'lucide-react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File } from 'lucide-react';
 
 const DEFAULT_COLUMNS = [
   { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
@@ -364,14 +364,92 @@ function SkeletonCard() {
 function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackground, canNotify }) {
   const [title, setTitle] = useState('');
   const [transcript, setTranscript] = useState('');
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const fileInputRef = useRef(null);
 
   // Clear form when modal opens
   useEffect(() => {
     if (isOpen) {
       setTitle('');
       setTranscript('');
+      setUploadedFile(null);
+      setUploadError(null);
     }
   }, [isOpen]);
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['application/pdf', 'text/plain'];
+    const validExtensions = ['.pdf', '.txt'];
+    const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+
+    if (!validTypes.includes(file.type) && !hasValidExtension) {
+      setUploadError('Please upload a PDF or TXT file');
+      return;
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('File size must be less than 10MB');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      // Read file as base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Send to API for parsing
+      const response = await fetch('/api/parse-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file: base64,
+          filename: file.name,
+          type: file.type
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setTranscript(data.text);
+        setUploadedFile(file.name);
+        // Try to extract title from filename
+        if (!title) {
+          const nameWithoutExt = file.name.replace(/\.(pdf|txt)$/i, '');
+          setTitle(nameWithoutExt);
+        }
+      } else {
+        setUploadError(data.error || 'Failed to parse file');
+      }
+    } catch (err) {
+      console.error('File upload error:', err);
+      setUploadError('Failed to upload file');
+    } finally {
+      setIsUploading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -383,6 +461,8 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
   const handleClose = () => {
     setTitle('');
     setTranscript('');
+    setUploadedFile(null);
+    setUploadError(null);
     onClose();
   };
 
@@ -422,20 +502,62 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Transcript <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-slate-700">
+                Transcript <span className="text-rose-500">*</span>
+              </label>
+              <div className="flex items-center gap-2">
+                {uploadedFile && (
+                  <span className="text-xs text-emerald-600 flex items-center gap-1">
+                    <File size={12} />
+                    {uploadedFile}
+                  </span>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.txt,application/pdf,text/plain"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  disabled={isProcessing || isUploading}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isProcessing || isUploading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {isUploading ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={14} />
+                      Upload PDF or TXT
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            {uploadError && (
+              <p className="text-xs text-rose-500 mb-2">{uploadError}</p>
+            )}
             <textarea
               value={transcript}
-              onChange={(e) => setTranscript(e.target.value)}
-              placeholder="Paste your meeting transcript here..."
+              onChange={(e) => {
+                setTranscript(e.target.value);
+                if (uploadedFile) setUploadedFile(null);
+              }}
+              placeholder="Paste your meeting transcript here, or upload a PDF/TXT file..."
               rows={12}
               required
-              disabled={isProcessing}
+              disabled={isProcessing || isUploading}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono text-sm disabled:bg-slate-50"
             />
             <p className="text-xs text-slate-400 mt-1">
-              Paste the full transcript from Plaud. The AI will extract genuine action items and commitments.
+              Paste the full transcript or upload a file. The AI will extract genuine action items and commitments.
             </p>
           </div>
 
