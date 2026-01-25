@@ -198,7 +198,7 @@ export default async function handler(req, res) {
         task: task.task,
         owner: task.owner || 'Me',
         dueDate: task.dueDate,
-        status: 'todo',
+        status: 'uncategorized',
         type: task.type || 'action',
         priority: task.priority || 'medium',
         person: task.person || null,

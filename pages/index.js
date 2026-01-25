@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search } from 'lucide-react';
 
 const DEFAULT_COLUMNS = [
-  { id: 'todo', label: 'To Do', color: 'slate', order: 0 },
-  { id: 'in-progress', label: 'In Progress', color: 'blue', order: 1 },
-  { id: 'waiting', label: 'Waiting On Others', color: 'amber', order: 2 },
-  { id: 'done', label: 'Done', color: 'emerald', order: 3 },
+  { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
+  { id: 'todo', label: 'To Do', color: 'slate', order: 1 },
+  { id: 'in-progress', label: 'In Progress', color: 'blue', order: 2 },
+  { id: 'waiting', label: 'Waiting On Others', color: 'amber', order: 3 },
+  { id: 'done', label: 'Done', color: 'emerald', order: 4 },
 ];
 
 const COLUMN_COLORS = {

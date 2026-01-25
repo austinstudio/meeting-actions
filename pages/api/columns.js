@@ -4,10 +4,11 @@
 import { kv } from '@vercel/kv';
 
 const DEFAULT_COLUMNS = [
-  { id: 'todo', label: 'To Do', color: 'slate', order: 0 },
-  { id: 'in-progress', label: 'In Progress', color: 'blue', order: 1 },
-  { id: 'waiting', label: 'Waiting On Others', color: 'amber', order: 2 },
-  { id: 'done', label: 'Done', color: 'emerald', order: 3 },
+  { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
+  { id: 'todo', label: 'To Do', color: 'slate', order: 1 },
+  { id: 'in-progress', label: 'In Progress', color: 'blue', order: 2 },
+  { id: 'waiting', label: 'Waiting On Others', color: 'amber', order: 3 },
+  { id: 'done', label: 'Done', color: 'emerald', order: 4 },
 ];
 
 export default async function handler(req, res) {
@@ -100,17 +101,17 @@ export default async function handler(req, res) {
       }
       
       // Prevent deleting default required columns
-      if (['todo', 'done'].includes(columnId)) {
-        return res.status(400).json({ error: 'Cannot delete To Do or Done columns' });
+      if (['uncategorized', 'todo', 'done'].includes(columnId)) {
+        return res.status(400).json({ error: 'Cannot delete Uncategorized, To Do, or Done columns' });
       }
-      
+
       let columns = await kv.get('columns') || DEFAULT_COLUMNS;
       let tasks = await kv.get('tasks') || [];
-      
-      // Move tasks from deleted column to 'todo'
+
+      // Move tasks from deleted column to 'uncategorized'
       tasks = tasks.map(t => {
         if (t.status === columnId) {
-          return { ...t, status: 'todo' };
+          return { ...t, status: 'uncategorized' };
         }
         return t;
       });
