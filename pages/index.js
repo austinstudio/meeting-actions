@@ -3232,21 +3232,22 @@ export default function MeetingKanban() {
             </div>
           ) : (
             /* Expanded Sidebar */
-            <div className="flex-1 overflow-hidden flex flex-col px-4 pb-4">
-              {/* Add Meeting Button */}
-              <button
-                onClick={() => setShowPasteModal(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors mb-4"
-              >
-                <Plus size={18} />
-                Add Meeting Transcript
-              </button>
+            <div className="flex-1 flex flex-col min-h-0">
+              {/* Fixed Header Section */}
+              <div className="px-4 pb-2 flex-shrink-0">
+                {/* Add Meeting Button */}
+                <button
+                  onClick={() => setShowPasteModal(true)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 dark:bg-orange-500 text-white rounded-lg font-medium hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors mb-4"
+                >
+                  <Plus size={18} />
+                  Add Meeting Transcript
+                </button>
 
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-slate-700 dark:text-slate-200">Meetings</h2>
-              </div>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-semibold text-slate-700 dark:text-slate-200">Meetings</h2>
+                </div>
 
-              <div className="space-y-2 mb-4">
                 <button
                   onClick={() => setSelectedMeeting(null)}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${!selectedMeeting ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
@@ -3255,56 +3256,59 @@ export default function MeetingKanban() {
                 </button>
               </div>
 
-              {loading && meetings.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 dark:text-neutral-500">
-                  <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
-                  <p className="text-sm">Loading...</p>
-                </div>
-              ) : meetings.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 dark:text-neutral-500">
-                  <FileText size={32} className="mx-auto mb-2 opacity-50" />
-                  <p className="text-sm mb-2">No meetings yet</p>
-                  <p className="text-xs">Click "Add Meeting Transcript" to get started</p>
-                </div>
-              ) : (
-                <div className="space-y-2 flex-1 overflow-y-auto">
-                  {meetings
-                    .map(meeting => ({
-                      ...meeting,
-                      taskCount: tasks.filter(t => t.meetingId === meeting.id && !t.archived && !t.deleted).length
-                    }))
-                    .filter(meeting => showEmptyMeetings || meeting.taskCount > 0)
-                    .map(meeting => (
-                      <MeetingCard
-                        key={meeting.id}
-                        meeting={meeting}
-                        taskCount={meeting.taskCount}
-                        isSelected={selectedMeeting === meeting.id}
-                        onClick={() => setSelectedMeeting(meeting.id === selectedMeeting ? null : meeting.id)}
-                        onDelete={handleDeleteMeeting}
-                        onEdit={setEditingMeeting}
-                        isEmpty={meeting.taskCount === 0}
-                      />
-                    ))}
-                  {/* Show empty meetings toggle */}
-                  {meetings.some(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0) && (
-                    <button
-                      onClick={() => setShowEmptyMeetings(!showEmptyMeetings)}
-                      className="w-full text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-slate-400 py-2 flex items-center justify-center gap-1"
-                    >
-                      {showEmptyMeetings ? (
-                        <>Hide empty meetings</>
-                      ) : (
-                        <>Show {meetings.filter(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0).length} empty meetings</>
-                      )}
-                    </button>
-                  )}
-                </div>
-              )}
+              {/* Scrollable Meetings List */}
+              <div className="flex-1 overflow-y-auto px-4 min-h-0">
+                {loading && meetings.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 dark:text-neutral-500">
+                    <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
+                    <p className="text-sm">Loading...</p>
+                  </div>
+                ) : meetings.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 dark:text-neutral-500">
+                    <FileText size={32} className="mx-auto mb-2 opacity-50" />
+                    <p className="text-sm mb-2">No meetings yet</p>
+                    <p className="text-xs">Click "Add Meeting Transcript" to get started</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 pb-2">
+                    {meetings
+                      .map(meeting => ({
+                        ...meeting,
+                        taskCount: tasks.filter(t => t.meetingId === meeting.id && !t.archived && !t.deleted).length
+                      }))
+                      .filter(meeting => showEmptyMeetings || meeting.taskCount > 0)
+                      .map(meeting => (
+                        <MeetingCard
+                          key={meeting.id}
+                          meeting={meeting}
+                          taskCount={meeting.taskCount}
+                          isSelected={selectedMeeting === meeting.id}
+                          onClick={() => setSelectedMeeting(meeting.id === selectedMeeting ? null : meeting.id)}
+                          onDelete={handleDeleteMeeting}
+                          onEdit={setEditingMeeting}
+                          isEmpty={meeting.taskCount === 0}
+                        />
+                      ))}
+                    {/* Show empty meetings toggle */}
+                    {meetings.some(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0) && (
+                      <button
+                        onClick={() => setShowEmptyMeetings(!showEmptyMeetings)}
+                        className="w-full text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-slate-400 py-2 flex items-center justify-center gap-1"
+                      >
+                        {showEmptyMeetings ? (
+                          <>Hide empty meetings</>
+                        ) : (
+                          <>Show {meetings.filter(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0).length} empty meetings</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
-              {/* Archive & Trash section */}
-              <div className="mt-4 pt-4 border-t border-slate-200 dark:border-neutral-800">
-                <div className="flex items-center justify-between mb-3">
+              {/* Fixed Bottom Section - Archive & Trash */}
+              <div className="flex-shrink-0 px-4 pb-4 pt-3 border-t border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950">
+                <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-medium text-slate-600 dark:text-neutral-300">Archive</h3>
                   {stats.archived > 0 && (
                     <span className="text-xs bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 px-2 py-0.5 rounded-full">
@@ -3312,11 +3316,11 @@ export default function MeetingKanban() {
                     </span>
                   )}
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   <button
                     onClick={handleArchiveDone}
                     disabled={(columnStats.find(c => c.id === 'done')?.count || 0) === 0}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Archive size={16} />
                     Archive completed ({columnStats.find(c => c.id === 'done')?.count || 0})
@@ -3326,7 +3330,7 @@ export default function MeetingKanban() {
                       setShowArchived(!showArchived);
                       if (showTrash) setShowTrash(false);
                     }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showArchived ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg ${showArchived ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
                   >
                     <FileText size={16} />
                     {showArchived ? 'Show active tasks' : 'View archived'}
@@ -3334,7 +3338,7 @@ export default function MeetingKanban() {
                 </div>
 
                 {/* Trash */}
-                <div className="flex items-center justify-between mb-3 mt-4">
+                <div className="flex items-center justify-between mb-2 mt-3">
                   <h3 className="text-sm font-medium text-slate-600 dark:text-neutral-300">Trash</h3>
                   {stats.trash > 0 && (
                     <span className="text-xs bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 px-2 py-0.5 rounded-full">
@@ -3342,18 +3346,16 @@ export default function MeetingKanban() {
                     </span>
                   )}
                 </div>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => {
-                      setShowTrash(!showTrash);
-                      if (showArchived) setShowArchived(false);
-                    }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showTrash ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
-                  >
-                    <Trash2 size={16} />
-                    {showTrash ? 'Back to tasks' : `View trash${stats.trash > 0 ? ` (${stats.trash})` : ''}`}
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    setShowTrash(!showTrash);
+                    if (showArchived) setShowArchived(false);
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg ${showTrash ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                >
+                  <Trash2 size={16} />
+                  {showTrash ? 'Back to tasks' : `View trash${stats.trash > 0 ? ` (${stats.trash})` : ''}`}
+                </button>
               </div>
             </div>
           )}
