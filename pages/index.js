@@ -1997,6 +1997,105 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
   );
 }
 
+// FilterDropdown component for compact filter menus
+function FilterDropdown({ label, icon: Icon, options, value, onChange, multiple = false, badge }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const hasValue = multiple ? value.length > 0 : value !== null && value !== 'all';
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+          hasValue
+            ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium'
+            : 'bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 text-slate-600 dark:text-neutral-300 hover:border-slate-300 dark:hover:border-neutral-600'
+        }`}
+      >
+        {Icon && <Icon size={14} />}
+        {label}
+        {badge && <span className="text-xs opacity-70">({badge})</span>}
+        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-lg shadow-lg z-50 min-w-[160px] py-1">
+          {options.map(option => {
+            const isSelected = multiple
+              ? value.includes(option.id)
+              : value === option.id;
+
+            return (
+              <button
+                key={option.id}
+                onClick={() => {
+                  if (multiple) {
+                    onChange(isSelected
+                      ? value.filter(v => v !== option.id)
+                      : [...value, option.id]
+                    );
+                  } else {
+                    onChange(isSelected ? (option.id === 'all' ? 'all' : null) : option.id);
+                    setIsOpen(false);
+                  }
+                }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                  isSelected
+                    ? 'bg-indigo-50 dark:bg-orange-500/10 text-indigo-700 dark:text-orange-500'
+                    : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-neutral-700'
+                }`}
+              >
+                {multiple && (
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                    isSelected
+                      ? 'bg-indigo-600 dark:bg-orange-500 border-indigo-600 dark:border-orange-500'
+                      : 'border-slate-300 dark:border-neutral-600'
+                  }`}>
+                    {isSelected && <CheckCircle2 size={10} className="text-white" />}
+                  </div>
+                )}
+                {option.icon && <option.icon size={14} className={option.color || ''} />}
+                <span className="flex-1">{option.label}</span>
+                {option.count !== undefined && (
+                  <span className="text-xs text-slate-400 dark:text-neutral-500">{option.count}</span>
+                )}
+              </button>
+            );
+          })}
+
+          {multiple && value.length > 0 && (
+            <>
+              <div className="h-px bg-slate-200 dark:bg-neutral-700 my-1" />
+              <button
+                onClick={() => {
+                  onChange([]);
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-2 text-sm text-left text-slate-500 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-neutral-700"
+              >
+                Clear all
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SearchInput({ value, onChange, resultCount }) {
   const inputRef = useRef(null);
 
@@ -3076,99 +3175,70 @@ export default function MeetingKanban() {
 
         {/* Main Content */}
         <main className="flex-1 p-6 overflow-x-auto">
-          {/* Filters */}
-          <div className="flex flex-col gap-3 mb-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-wrap">
-                <SearchInput
-                  value={searchQuery}
-                  onChange={setSearchQuery}
-                  resultCount={filteredTasks.length}
-                />
-                <div className="w-px h-6 bg-slate-200 dark:bg-neutral-800" />
-                <span className="text-sm text-slate-500 dark:text-neutral-400">Show:</span>
-                {[
-                  { id: 'all', label: 'All Items' },
-                  { id: 'mine', label: 'My Tasks' },
-                  { id: 'actions', label: 'Actions' },
-                  { id: 'follow-ups', label: 'Follow-ups' },
-                ].map(filter => (
-                  <button
-                    key={filter.id}
-                    onClick={() => setView(filter.id)}
-                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${view === filter.id ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium' : 'bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 text-slate-600 dark:text-neutral-300 hover:border-slate-300 dark:hover:border-neutral-600'}`}
-                  >
-                    {filter.label}
-                    {filter.id === 'mine' && (
-                      <span className="ml-1 text-xs">({stats.mine})</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setShowColumnModal(true)}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-neutral-300 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-              >
-                <Plus size={16} />
-                Add Column
-              </button>
-            </div>
-
-            {/* Second row: Due date filters and tag filters */}
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Due Date Quick Filters */}
-              <span className="text-sm text-slate-500 dark:text-neutral-400">Due:</span>
-              {[
-                { id: 'overdue', label: 'Overdue', color: 'rose' },
-                { id: 'today', label: 'Today', color: 'amber' },
-                { id: 'this-week', label: 'This Week', color: 'blue' },
-                { id: 'upcoming', label: 'Upcoming', color: 'slate' },
-              ].map(filter => (
-                <button
-                  key={filter.id}
-                  onClick={() => setDueDateFilter(dueDateFilter === filter.id ? null : filter.id)}
-                  className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
-                    dueDateFilter === filter.id
-                      ? filter.color === 'rose' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 font-medium'
-                      : filter.color === 'amber' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium'
-                      : filter.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium'
-                      : 'bg-slate-200 dark:bg-neutral-800 text-slate-700 dark:text-neutral-300 font-medium'
-                      : 'bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 text-slate-600 dark:text-neutral-300 hover:border-slate-300 dark:hover:border-neutral-600'
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              ))}
+          {/* Filters - Compact single row with dropdowns */}
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2 flex-wrap">
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                resultCount={filteredTasks.length}
+              />
 
               <div className="w-px h-6 bg-slate-200 dark:bg-neutral-800" />
 
-              {/* Tag Filters */}
-              <span className="text-sm text-slate-500 dark:text-neutral-400">Tags:</span>
-              {PREDEFINED_TAGS.slice(0, 4).map(tag => (
-                <button
-                  key={tag}
-                  onClick={() => setTagFilter(tagFilter.includes(tag) ? tagFilter.filter(t => t !== tag) : [...tagFilter, tag])}
-                  className={`px-2 py-1 rounded-full text-xs transition-colors ${
-                    tagFilter.includes(tag)
-                      ? `${TAG_COLORS[tag]?.bg || TAG_COLORS.default.bg} ${TAG_COLORS[tag]?.text || TAG_COLORS.default.text} font-medium`
-                      : 'bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 text-slate-600 dark:text-neutral-300 hover:border-slate-300 dark:hover:border-neutral-600'
-                  }`}
-                >
-                  #{tag}
-                </button>
-              ))}
+              {/* View Dropdown */}
+              <FilterDropdown
+                label={view === 'all' ? 'View' : view === 'mine' ? 'My Tasks' : view === 'actions' ? 'Actions' : 'Follow-ups'}
+                options={[
+                  { id: 'all', label: 'All Items', count: filteredTasks.length },
+                  { id: 'mine', label: 'My Tasks', count: stats.mine },
+                  { id: 'actions', label: 'Actions' },
+                  { id: 'follow-ups', label: 'Follow-ups' },
+                ]}
+                value={view}
+                onChange={setView}
+              />
 
-              {/* Active filters display */}
-              {(searchQuery || selectedMeeting || showArchived || tagFilter.length > 0 || dueDateFilter) && (
+              {/* Due Date Dropdown */}
+              <FilterDropdown
+                label={dueDateFilter ? dueDateFilter === 'overdue' ? 'Overdue' : dueDateFilter === 'today' ? 'Today' : dueDateFilter === 'this-week' ? 'This Week' : 'Upcoming' : 'Due'}
+                icon={Clock}
+                options={[
+                  { id: null, label: 'Any time' },
+                  { id: 'overdue', label: 'Overdue', color: 'text-rose-500' },
+                  { id: 'today', label: 'Due Today', color: 'text-amber-500' },
+                  { id: 'this-week', label: 'This Week', color: 'text-blue-500' },
+                  { id: 'upcoming', label: 'Upcoming' },
+                ]}
+                value={dueDateFilter}
+                onChange={setDueDateFilter}
+              />
+
+              {/* Tags Dropdown */}
+              <FilterDropdown
+                label="Tags"
+                icon={Tag}
+                badge={tagFilter.length > 0 ? tagFilter.length : null}
+                options={PREDEFINED_TAGS.map(tag => ({
+                  id: tag,
+                  label: `#${tag}`,
+                }))}
+                value={tagFilter}
+                onChange={setTagFilter}
+                multiple
+              />
+
+              {/* Active Filters as Chips */}
+              {(searchQuery || selectedMeeting || showArchived || tagFilter.length > 0 || dueDateFilter || view !== 'all') && (
                 <>
                   <div className="w-px h-6 bg-slate-200 dark:bg-neutral-800" />
+
                   {searchQuery && (
                     <button
                       onClick={() => setSearchQuery('')}
-                      className="px-3 py-1 rounded-full text-xs bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium flex items-center gap-1"
+                      className="px-2 py-1 rounded-full text-xs bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium flex items-center gap-1"
                     >
-                      "{searchQuery.slice(0, 15)}{searchQuery.length > 15 ? '...' : ''}"
+                      "{searchQuery.slice(0, 12)}{searchQuery.length > 12 ? '...' : ''}"
                       <X size={12} />
                     </button>
                   )}
@@ -3176,21 +3246,47 @@ export default function MeetingKanban() {
                   {selectedMeeting && (
                     <button
                       onClick={() => setSelectedMeeting(null)}
-                      className="px-3 py-1 rounded-full text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1"
+                      className="px-2 py-1 rounded-full text-xs bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1"
                     >
-                      {meetings.find(m => m.id === selectedMeeting)?.title?.slice(0, 20)}...
+                      <FileText size={10} />
+                      {meetings.find(m => m.id === selectedMeeting)?.title?.slice(0, 15)}...
                       <X size={12} />
                     </button>
                   )}
 
                   {showArchived && (
-                    <span className="px-3 py-1 rounded-full text-xs bg-slate-200 dark:bg-neutral-800 text-slate-600 dark:text-neutral-300 font-medium">
-                      Viewing Archived
+                    <span className="px-2 py-1 rounded-full text-xs bg-slate-200 dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 font-medium flex items-center gap-1">
+                      <Archive size={10} />
+                      Archived
                     </span>
+                  )}
+
+                  {/* Clear all filters button */}
+                  {(tagFilter.length > 0 || dueDateFilter || view !== 'all' || searchQuery || selectedMeeting) && (
+                    <button
+                      onClick={() => {
+                        setView('all');
+                        setDueDateFilter(null);
+                        setTagFilter([]);
+                        setSearchQuery('');
+                        setSelectedMeeting(null);
+                      }}
+                      className="px-2 py-1 text-xs text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-200 transition-colors"
+                    >
+                      Clear all
+                    </button>
                   )}
                 </>
               )}
             </div>
+
+            <button
+              onClick={() => setShowColumnModal(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-neutral-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors whitespace-nowrap"
+            >
+              <Plus size={16} />
+              Add Column
+            </button>
           </div>
 
           {/* Kanban Board */}
