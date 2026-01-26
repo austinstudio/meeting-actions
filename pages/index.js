@@ -237,14 +237,14 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
 
       {/* Meeting source tag */}
       {meeting && (
-        <div className="mb-2 -mt-1 pr-12">
+        <div className="mb-2 -mt-1 pr-20">
           <span className="text-xs text-indigo-600 dark:text-orange-500 font-medium truncate block" title={meeting.title}>
             {meeting.title}
           </span>
         </div>
       )}
 
-      <p className={`${density.text} text-slate-800 dark:text-white font-medium leading-snug pr-8 mb-2`}>
+      <p className={`${density.text} text-slate-800 dark:text-white font-medium leading-snug pr-20 mb-2`}>
         {task.task}
       </p>
 
