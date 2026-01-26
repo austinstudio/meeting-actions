@@ -464,12 +464,14 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
   );
 }
 
-function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, onEdit, isEmpty }) {
+function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, onEdit, isEmpty, hasUncategorized }) {
   const [showActions, setShowActions] = useState(false);
 
   return (
     <div
       className={`relative w-full text-left p-3 rounded-lg border transition-all ${
+        hasUncategorized ? 'border-l-4 border-l-purple-500 dark:border-l-purple-400' : ''
+      } ${
         isSelected
           ? 'bg-indigo-50 dark:bg-orange-500/20 border-indigo-200 dark:border-indigo-800'
           : isEmpty
@@ -3272,10 +3274,14 @@ export default function MeetingKanban() {
                 ) : (
                   <div className="space-y-2 pb-2">
                     {meetings
-                      .map(meeting => ({
-                        ...meeting,
-                        taskCount: tasks.filter(t => t.meetingId === meeting.id && !t.archived && !t.deleted).length
-                      }))
+                      .map(meeting => {
+                        const meetingTasks = tasks.filter(t => t.meetingId === meeting.id && !t.archived && !t.deleted);
+                        return {
+                          ...meeting,
+                          taskCount: meetingTasks.length,
+                          uncategorizedCount: meetingTasks.filter(t => t.status === 'uncategorized').length
+                        };
+                      })
                       .filter(meeting => showEmptyMeetings || meeting.taskCount > 0)
                       .map(meeting => (
                         <MeetingCard
@@ -3287,6 +3293,7 @@ export default function MeetingKanban() {
                           onDelete={handleDeleteMeeting}
                           onEdit={setEditingMeeting}
                           isEmpty={meeting.taskCount === 0}
+                          hasUncategorized={meeting.uncategorizedCount > 0}
                         />
                       ))}
                     {/* Show empty meetings toggle */}
