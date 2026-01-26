@@ -28,12 +28,10 @@ export const authOptions = {
       return false;
     },
     async jwt({ token, user, account, profile }) {
-      // Debug: log what we receive from Google (check Vercel function logs)
-      if (profile || user) {
-        console.log('JWT callback - user:', JSON.stringify(user));
-        console.log('JWT callback - profile:', JSON.stringify(profile));
-        console.log('JWT callback - token before:', JSON.stringify(token));
-      }
+      // Debug: always log to see what's happening
+      console.log('JWT callback - user:', user ? JSON.stringify(user) : 'undefined');
+      console.log('JWT callback - profile:', profile ? JSON.stringify(profile) : 'undefined');
+      console.log('JWT callback - account:', account ? JSON.stringify(account) : 'undefined');
 
       // On initial sign in, capture picture from profile or user
       if (user?.image) {
@@ -43,7 +41,7 @@ export const authOptions = {
         token.picture = profile.picture;
       }
 
-      console.log('JWT callback - token after:', JSON.stringify(token));
+      console.log('JWT callback - final token:', JSON.stringify(token));
       return token;
     },
     async session({ session, token }) {
