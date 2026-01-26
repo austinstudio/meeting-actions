@@ -1,7 +1,9 @@
 // pages/api/columns.js
 // Manage custom kanban columns
+// Default columns are global, custom columns are per-user
 
 import { kv } from '@vercel/kv';
+import { requireAuth } from '../../lib/auth';
 
 const DEFAULT_COLUMNS = [
   { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
@@ -20,24 +22,24 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // GET - Return all columns
+  // GET - Return default columns + user's custom columns
   if (req.method === 'GET') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
-      let columns = await kv.get('columns');
-      if (!columns || columns.length === 0) {
-        // Initialize with default columns
-        await kv.set('columns', DEFAULT_COLUMNS);
-        columns = DEFAULT_COLUMNS;
-      } else {
-        // Ensure 'uncategorized' column exists (for existing users)
-        const hasUncategorized = columns.some(c => c.id === 'uncategorized');
-        if (!hasUncategorized) {
-          // Add uncategorized at the beginning, shift other orders
-          columns = columns.map(c => ({ ...c, order: c.order + 1 }));
-          columns.unshift({ id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 });
-          await kv.set('columns', columns);
-        }
-      }
+      let allColumns = await kv.get('columns') || [];
+
+      // Get default columns (no userId) and user's custom columns
+      const defaultColumns = DEFAULT_COLUMNS;
+      const userCustomColumns = allColumns.filter(c => c.custom && c.userId === userId);
+
+      // Combine: default columns + user's custom columns
+      let columns = [...defaultColumns, ...userCustomColumns];
+
+      // Re-number orders
+      columns = columns.map((c, i) => ({ ...c, order: i }));
+
       return res.status(200).json({ columns });
     } catch (error) {
       console.error('Get columns error:', error);
@@ -45,36 +47,44 @@ export default async function handler(req, res) {
     }
   }
 
-  // POST - Add a new column
+  // POST - Add a new custom column for the user
   if (req.method === 'POST') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
       const { label, color } = req.body;
-      
+
       if (!label) {
         return res.status(400).json({ error: 'Column label is required' });
       }
-      
-      let columns = await kv.get('columns') || DEFAULT_COLUMNS;
-      
-      // Generate ID from label
-      const id = label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-      
-      // Check for duplicate
-      if (columns.some(c => c.id === id)) {
+
+      let allColumns = await kv.get('columns') || [];
+
+      // Generate ID from label with user prefix to avoid conflicts
+      const id = `${userId.slice(-6)}_${label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
+
+      // Check for duplicate in user's columns
+      const userColumns = allColumns.filter(c => c.userId === userId);
+      if (userColumns.some(c => c.label.toLowerCase() === label.toLowerCase())) {
         return res.status(400).json({ error: 'Column with this name already exists' });
       }
-      
+
       const newColumn = {
         id,
+        userId,
         label,
         color: color || 'slate',
-        order: columns.length,
+        order: DEFAULT_COLUMNS.length + userColumns.length,
         custom: true
       };
-      
-      columns.push(newColumn);
-      await kv.set('columns', columns);
-      
+
+      allColumns.push(newColumn);
+      await kv.set('columns', allColumns);
+
+      // Return combined columns for user
+      const columns = [...DEFAULT_COLUMNS, ...userColumns, newColumn].map((c, i) => ({ ...c, order: i }));
+
       return res.status(200).json({ success: true, column: newColumn, columns });
     } catch (error) {
       console.error('Add column error:', error);
@@ -82,17 +92,36 @@ export default async function handler(req, res) {
     }
   }
 
-  // PUT - Update columns (reorder, rename, etc.)
+  // PUT - Update user's custom columns (reorder, rename, etc.)
   if (req.method === 'PUT') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
-      const { columns } = req.body;
-      
-      if (!columns || !Array.isArray(columns)) {
+      const { columns: updatedColumns } = req.body;
+
+      if (!updatedColumns || !Array.isArray(updatedColumns)) {
         return res.status(400).json({ error: 'Columns array is required' });
       }
-      
-      await kv.set('columns', columns);
-      
+
+      let allColumns = await kv.get('columns') || [];
+
+      // Extract only the user's custom columns from the update
+      // (ignore default columns and other users' columns in the request)
+      const updatedCustomColumns = updatedColumns.filter(c => c.custom && c.userId === userId);
+
+      // Remove user's old custom columns
+      allColumns = allColumns.filter(c => !(c.custom && c.userId === userId));
+
+      // Add updated custom columns
+      allColumns = [...allColumns, ...updatedCustomColumns];
+
+      await kv.set('columns', allColumns);
+
+      // Return combined columns for user
+      const userCustomColumns = allColumns.filter(c => c.custom && c.userId === userId);
+      const columns = [...DEFAULT_COLUMNS, ...userCustomColumns].map((c, i) => ({ ...c, order: i }));
+
       return res.status(200).json({ success: true, columns });
     } catch (error) {
       console.error('Update columns error:', error);
@@ -100,40 +129,50 @@ export default async function handler(req, res) {
     }
   }
 
-  // DELETE - Remove a column (moves tasks to 'todo')
+  // DELETE - Remove a user's custom column (moves tasks to 'uncategorized')
   if (req.method === 'DELETE') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
       const { columnId } = req.body;
-      
+
       if (!columnId) {
         return res.status(400).json({ error: 'Column ID is required' });
       }
-      
+
       // Prevent deleting default required columns
-      if (['uncategorized', 'todo', 'done'].includes(columnId)) {
-        return res.status(400).json({ error: 'Cannot delete Uncategorized, To Do, or Done columns' });
+      if (['uncategorized', 'todo', 'in-progress', 'waiting', 'done'].includes(columnId)) {
+        return res.status(400).json({ error: 'Cannot delete default columns' });
       }
 
-      let columns = await kv.get('columns') || DEFAULT_COLUMNS;
+      let allColumns = await kv.get('columns') || [];
       let tasks = await kv.get('tasks') || [];
 
-      // Move tasks from deleted column to 'uncategorized'
+      // Verify the column belongs to this user
+      const columnToDelete = allColumns.find(c => c.id === columnId && c.userId === userId);
+      if (!columnToDelete) {
+        return res.status(404).json({ error: 'Column not found' });
+      }
+
+      // Move user's tasks from deleted column to 'uncategorized'
       tasks = tasks.map(t => {
-        if (t.status === columnId) {
+        if (t.userId === userId && t.status === columnId) {
           return { ...t, status: 'uncategorized' };
         }
         return t;
       });
-      
+
       // Remove the column
-      columns = columns.filter(c => c.id !== columnId);
-      
-      // Reorder
-      columns = columns.map((c, i) => ({ ...c, order: i }));
-      
-      await kv.set('columns', columns);
+      allColumns = allColumns.filter(c => c.id !== columnId);
+
+      await kv.set('columns', allColumns);
       await kv.set('tasks', tasks);
-      
+
+      // Return combined columns for user
+      const userCustomColumns = allColumns.filter(c => c.custom && c.userId === userId);
+      const columns = [...DEFAULT_COLUMNS, ...userCustomColumns].map((c, i) => ({ ...c, order: i }));
+
       return res.status(200).json({ success: true, columns });
     } catch (error) {
       console.error('Delete column error:', error);

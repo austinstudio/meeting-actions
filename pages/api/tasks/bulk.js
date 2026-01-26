@@ -2,6 +2,7 @@
 // Bulk operations on tasks (archive all done, etc.)
 
 import { kv } from '@vercel/kv';
+import { requireAuth } from '../../../lib/auth';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -13,17 +14,20 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
       const { action } = req.body;
-      
+
       // Get current tasks from KV
       let tasks = await kv.get('tasks') || [];
-      
+
       if (action === 'archive-done') {
-        // Archive all tasks with status 'done'
+        // Archive all user's tasks with status 'done'
         let archivedCount = 0;
         tasks = tasks.map(t => {
-          if (t.status === 'done' && !t.archived) {
+          if (t.userId === userId && t.status === 'done' && !t.archived) {
             archivedCount++;
             return {
               ...t,
@@ -33,21 +37,21 @@ export default async function handler(req, res) {
           }
           return t;
         });
-        
+
         await kv.set('tasks', tasks);
-        
-        return res.status(200).json({ 
-          success: true, 
+
+        return res.status(200).json({
+          success: true,
           archivedCount,
           message: `Archived ${archivedCount} completed tasks`
         });
       }
-      
+
       if (action === 'unarchive-all') {
-        // Unarchive all tasks
+        // Unarchive all user's tasks
         let unarchivedCount = 0;
         tasks = tasks.map(t => {
-          if (t.archived) {
+          if (t.userId === userId && t.archived) {
             unarchivedCount++;
             return {
               ...t,
@@ -57,40 +61,39 @@ export default async function handler(req, res) {
           }
           return t;
         });
-        
-        await kv.set('tasks', tasks);
-        
-        return res.status(200).json({ 
-          success: true, 
-          unarchivedCount,
-          message: `Unarchived ${unarchivedCount} tasks`
-        });
-      }
-      
-      if (action === 'delete-archived') {
-        // Permanently delete all archived tasks
-        const originalCount = tasks.length;
-        tasks = tasks.filter(t => !t.archived);
-        const deletedCount = originalCount - tasks.length;
 
         await kv.set('tasks', tasks);
 
         return res.status(200).json({
           success: true,
-          deletedCount,
-          message: `Permanently deleted ${deletedCount} archived tasks`
+          unarchivedCount,
+          message: `Unarchived ${unarchivedCount} tasks`
+        });
+      }
+
+      if (action === 'delete-archived') {
+        // Permanently delete all user's archived tasks
+        const userArchivedCount = tasks.filter(t => t.userId === userId && t.archived).length;
+        tasks = tasks.filter(t => !(t.userId === userId && t.archived));
+
+        await kv.set('tasks', tasks);
+
+        return res.status(200).json({
+          success: true,
+          deletedCount: userArchivedCount,
+          message: `Permanently deleted ${userArchivedCount} archived tasks`
         });
       }
 
       if (action === 'reorder') {
-        // Bulk reorder tasks within a column
+        // Bulk reorder tasks within a column (only user's tasks)
         const { updates } = req.body; // Array of { id, order }
         if (!Array.isArray(updates)) {
           return res.status(400).json({ error: 'Updates array required' });
         }
 
         updates.forEach(({ id, order }) => {
-          const taskIndex = tasks.findIndex(t => t.id === id);
+          const taskIndex = tasks.findIndex(t => t.id === id && t.userId === userId);
           if (taskIndex !== -1) {
             tasks[taskIndex].order = order;
           }
@@ -105,7 +108,7 @@ export default async function handler(req, res) {
       }
 
       return res.status(400).json({ error: 'Unknown action' });
-      
+
     } catch (error) {
       console.error('Bulk action error:', error);
       return res.status(500).json({ error: 'Failed to perform bulk action' });

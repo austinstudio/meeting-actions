@@ -2,6 +2,7 @@
 // Create new tasks manually (not from transcript)
 
 import { kv } from '@vercel/kv';
+import { requireAuth } from '../../../lib/auth';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -13,19 +14,23 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
       const { task, owner, person, dueDate, priority, type, context, status } = req.body;
-      
+
       if (!task) {
         return res.status(400).json({ error: 'Task description is required' });
       }
-      
+
       // Get current tasks from KV
       let tasks = await kv.get('tasks') || [];
-      
+
       // Create new task
       const newTask = {
         id: `t_${Date.now()}`,
+        userId,
         meetingId: null, // Manual task, not from a meeting
         task: task,
         owner: owner || 'Me',

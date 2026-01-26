@@ -3,6 +3,7 @@
 // Includes comments and activity logging
 
 import { kv } from '@vercel/kv';
+import { requireAuth } from '../../../lib/auth';
 
 // Helper to generate activity log entry
 function createActivityEntry(type, field, oldValue, newValue, user = 'Corey') {
@@ -43,9 +44,12 @@ export default async function handler(req, res) {
 
   // GET - Get single task with comments and activity
   if (req.method === 'GET') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
       const tasks = await kv.get('tasks') || [];
-      const task = tasks.find(t => t.id === id);
+      const task = tasks.find(t => t.id === id && t.userId === userId);
 
       if (!task) {
         return res.status(404).json({ error: 'Task not found' });
@@ -60,15 +64,18 @@ export default async function handler(req, res) {
 
   // POST - Add a comment to the task
   if (req.method === 'POST') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
-      const { comment, user = 'Corey' } = req.body;
+      const { comment, user = 'User' } = req.body;
 
       if (!comment || !comment.trim()) {
         return res.status(400).json({ error: 'Comment is required' });
       }
 
       let tasks = await kv.get('tasks') || [];
-      const taskIndex = tasks.findIndex(t => t.id === id);
+      const taskIndex = tasks.findIndex(t => t.id === id && t.userId === userId);
 
       if (taskIndex === -1) {
         return res.status(404).json({ error: 'Task not found' });
@@ -110,14 +117,17 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'PATCH') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
       const { status, priority, archived, column, task, owner, person, dueDate, context, type, tags, subtasks, pinned, order } = req.body;
 
       // Get current tasks from KV
       let tasks = await kv.get('tasks') || [];
 
-      // Find the task
-      const taskIndex = tasks.findIndex(t => t.id === id);
+      // Find the task (must belong to user)
+      const taskIndex = tasks.findIndex(t => t.id === id && t.userId === userId);
       if (taskIndex === -1) {
         return res.status(404).json({ error: 'Task not found' });
       }
@@ -230,14 +240,17 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'DELETE') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
       const { permanent } = req.body || {};
 
       // Get current tasks from KV
       let tasks = await kv.get('tasks') || [];
 
-      // Find the task
-      const taskIndex = tasks.findIndex(t => t.id === id);
+      // Find the task (must belong to user)
+      const taskIndex = tasks.findIndex(t => t.id === id && t.userId === userId);
       if (taskIndex === -1) {
         return res.status(404).json({ error: 'Task not found' });
       }
@@ -269,6 +282,9 @@ export default async function handler(req, res) {
 
   // PUT - Restore a deleted task
   if (req.method === 'PUT') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
       const { restore } = req.body;
 
@@ -277,7 +293,7 @@ export default async function handler(req, res) {
       }
 
       let tasks = await kv.get('tasks') || [];
-      const taskIndex = tasks.findIndex(t => t.id === id);
+      const taskIndex = tasks.findIndex(t => t.id === id && t.userId === userId);
 
       if (taskIndex === -1) {
         return res.status(404).json({ error: 'Task not found' });

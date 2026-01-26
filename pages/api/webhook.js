@@ -4,6 +4,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { kv } from '@vercel/kv';
+import { requireAuth } from '../../lib/auth';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -129,15 +130,26 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // GET - Return all meetings and tasks from KV
+  // GET - Return all meetings and tasks from KV for current user
   if (req.method === 'GET') {
-    const meetings = await getMeetings();
-    const tasks = await getTasks();
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
+    const allMeetings = await getMeetings();
+    const allTasks = await getTasks();
+
+    // Filter to only return user's own data
+    const meetings = allMeetings.filter(m => m.userId === userId);
+    const tasks = allTasks.filter(t => t.userId === userId);
+
     return res.status(200).json({ meetings, tasks });
   }
 
   // POST - Process new transcript
   if (req.method === 'POST') {
+    const userId = await requireAuth(req, res);
+    if (!userId) return;
+
     try {
       const { transcript, title, date, noteId } = req.body;
 
@@ -182,6 +194,7 @@ export default async function handler(req, res) {
       const meetingId = `m_${Date.now()}`;
       const meeting = {
         id: meetingId,
+        userId,
         title: extracted.meeting.title || title || 'Untitled Meeting',
         date: date || new Date().toISOString().split('T')[0],
         duration: extracted.meeting.duration || null,
@@ -194,6 +207,7 @@ export default async function handler(req, res) {
       // Add tasks with generated IDs
       const newTasks = (extracted.tasks || []).map((task, index) => ({
         id: `t_${Date.now()}_${index}`,
+        userId,
         meetingId: meetingId,
         task: task.task,
         owner: task.owner || 'Me',
