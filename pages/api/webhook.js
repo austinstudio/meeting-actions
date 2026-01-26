@@ -37,6 +37,62 @@ async function saveTasks(tasks) {
   await kv.set('tasks', tasks);
 }
 
+// Parse date from title string - handles common formats
+function parseDateFromTitle(title) {
+  if (!title) return null;
+
+  // Try to find date patterns in the title
+  const patterns = [
+    // ISO format: 2024-01-15
+    /(\d{4}-\d{2}-\d{2})/,
+    // US format: 01/15/2024 or 1/15/2024
+    /(\d{1,2}\/\d{1,2}\/\d{4})/,
+    // US format: 01-15-2024
+    /(\d{1,2}-\d{1,2}-\d{4})/,
+    // Written: January 15, 2024 or Jan 15, 2024
+    /((?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4})/i,
+    // Written: 15 January 2024 or 15 Jan 2024
+    /(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})/i,
+    // Compact: 20240115
+    /\b(20\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))\b/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = title.match(pattern);
+    if (match) {
+      const dateStr = match[1];
+      const parsed = new Date(dateStr);
+
+      // Check if valid date
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toISOString().split('T')[0];
+      }
+
+      // Handle US format MM/DD/YYYY manually
+      const usMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (usMatch) {
+        const [, month, day, year] = usMatch;
+        const d = new Date(year, month - 1, day);
+        if (!isNaN(d.getTime())) {
+          return d.toISOString().split('T')[0];
+        }
+      }
+
+      // Handle compact format YYYYMMDD
+      const compactMatch = dateStr.match(/^(20\d{2})(\d{2})(\d{2})$/);
+      if (compactMatch) {
+        const [, year, month, day] = compactMatch;
+        const d = new Date(year, month - 1, day);
+        if (!isNaN(d.getTime())) {
+          return d.toISOString().split('T')[0];
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 const EXTRACTION_PROMPT = `You are an expert executive assistant skilled at identifying genuine, actionable commitments from meeting transcripts. Your job is to extract ONLY real action items — not discussion topics, ideas mentioned in passing, or general observations.
 
 ## CRITICAL: What IS an Action Item
@@ -192,11 +248,17 @@ export default async function handler(req, res) {
 
       // Generate IDs and store the meeting
       const meetingId = `m_${Date.now()}`;
+      const meetingTitle = extracted.meeting.title || title || 'Untitled Meeting';
+
+      // Try to extract date from title first, then fall back to provided date, then today
+      const extractedDate = parseDateFromTitle(title) || parseDateFromTitle(meetingTitle);
+      const meetingDate = extractedDate || date || new Date().toISOString().split('T')[0];
+
       const meeting = {
         id: meetingId,
         userId,
-        title: extracted.meeting.title || title || 'Untitled Meeting',
-        date: date || new Date().toISOString().split('T')[0],
+        title: meetingTitle,
+        date: meetingDate,
         duration: extracted.meeting.duration || null,
         participants: extracted.meeting.participants || [],
         summary: extracted.meeting.summary || '',
