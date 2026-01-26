@@ -790,7 +790,7 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden relative">
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden relative border border-transparent dark:border-neutral-600">
         {/* Processing Overlay */}
         {isProcessing && (
           <ProcessingOverlay
@@ -1032,7 +1032,7 @@ function AddColumnModal({ isOpen, onClose, onSubmit }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl w-full max-w-md">
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-md border border-transparent dark:border-neutral-600">
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Add New Column</h2>
           <button onClick={onClose} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-200">
@@ -1098,7 +1098,7 @@ function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmLabe
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden border border-transparent dark:border-neutral-600">
         <div className="p-6">
           <div className="flex items-start gap-4">
             {danger && (
@@ -1305,7 +1305,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col border border-transparent dark:border-neutral-600">
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Edit Task</h2>
           <button onClick={onClose} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-200">
@@ -1851,7 +1851,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden border border-transparent dark:border-neutral-600">
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Add Task to {columnName}</h2>
           <button onClick={onClose} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-200">
