@@ -2351,6 +2351,7 @@ export default function MeetingKanban() {
   const [showTrash, setShowTrash] = useState(false);
   const [showEmptyMeetings, setShowEmptyMeetings] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [lastSynced, setLastSynced] = useState(null);
   const [error, setError] = useState(null);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [showColumnModal, setShowColumnModal] = useState(false);
@@ -2509,6 +2510,7 @@ export default function MeetingKanban() {
       setMeetings(data.meetings || []);
       setTasks(data.tasks || []);
       setColumns(columnsData.columns || DEFAULT_COLUMNS);
+      setLastSynced(new Date());
       setError(null);
     } catch (err) {
       setError('Failed to fetch data');
@@ -3145,58 +3147,6 @@ export default function MeetingKanban() {
               )}
             </div>
 
-            {/* View Density Selector */}
-            <div className="relative group">
-              <button
-                className="p-2 text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-                title="View Density"
-              >
-                {viewDensity === 'compact' ? <Rows4 size={20} /> : viewDensity === 'spacious' ? <LayoutList size={20} /> : <Rows3 size={20} />}
-              </button>
-              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[140px]">
-                {[
-                  { id: 'compact', label: 'Compact', icon: Rows4 },
-                  { id: 'normal', label: 'Normal', icon: Rows3 },
-                  { id: 'spacious', label: 'Spacious', icon: LayoutList },
-                ].map(option => (
-                  <button
-                    key={option.id}
-                    onClick={() => changeViewDensity(option.id)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm ${viewDensity === option.id ? 'bg-indigo-50 dark:bg-orange-500/20 text-indigo-600 dark:text-orange-500' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-neutral-800'} first:rounded-t-lg last:rounded-b-lg`}
-                  >
-                    <option.icon size={16} />
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Theme Toggle */}
-            <div className="relative group">
-              <button
-                className="p-2 text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-                title="Theme"
-              >
-                {theme === 'dark' ? <Moon size={20} /> : theme === 'light' ? <Sun size={20} /> : <Monitor size={20} />}
-              </button>
-              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[120px]">
-                {[
-                  { id: 'light', label: 'Light', icon: Sun },
-                  { id: 'dark', label: 'Dark', icon: Moon },
-                  { id: 'system', label: 'System', icon: Monitor },
-                ].map(option => (
-                  <button
-                    key={option.id}
-                    onClick={() => changeTheme(option.id)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm ${theme === option.id ? 'bg-indigo-50 dark:bg-orange-500/20 text-indigo-600 dark:text-orange-500' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-neutral-800'} first:rounded-t-lg last:rounded-b-lg`}
-                  >
-                    <option.icon size={16} />
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* User Menu */}
             {session && (
               <div className="relative group">
@@ -3217,6 +3167,49 @@ export default function MeetingKanban() {
                     <div className="text-sm font-medium text-slate-700 dark:text-neutral-200 truncate">{session.user?.name || 'User'}</div>
                     <div className="text-xs text-slate-500 dark:text-neutral-400 truncate">{session.user?.email}</div>
                   </div>
+
+                  {/* Theme Options */}
+                  <div className="px-3 py-2 border-b border-slate-200 dark:border-neutral-800">
+                    <div className="text-xs text-slate-400 dark:text-neutral-500 mb-1.5">Theme</div>
+                    <div className="flex gap-1">
+                      {[
+                        { id: 'light', icon: Sun },
+                        { id: 'dark', icon: Moon },
+                        { id: 'system', icon: Monitor },
+                      ].map(option => (
+                        <button
+                          key={option.id}
+                          onClick={() => changeTheme(option.id)}
+                          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs rounded ${theme === option.id ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-600 dark:text-orange-500' : 'text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                          title={option.id.charAt(0).toUpperCase() + option.id.slice(1)}
+                        >
+                          <option.icon size={14} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* View Density Options */}
+                  <div className="px-3 py-2 border-b border-slate-200 dark:border-neutral-800">
+                    <div className="text-xs text-slate-400 dark:text-neutral-500 mb-1.5">Card Density</div>
+                    <div className="flex gap-1">
+                      {[
+                        { id: 'compact', icon: Rows4 },
+                        { id: 'normal', icon: Rows3 },
+                        { id: 'spacious', icon: LayoutList },
+                      ].map(option => (
+                        <button
+                          key={option.id}
+                          onClick={() => changeViewDensity(option.id)}
+                          className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs rounded ${viewDensity === option.id ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-600 dark:text-orange-500' : 'text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                          title={option.id.charAt(0).toUpperCase() + option.id.slice(1)}
+                        >
+                          <option.icon size={14} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <button
                     onClick={() => signOut({ callbackUrl: '/login' })}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-neutral-800 rounded-b-lg"
@@ -3228,13 +3221,21 @@ export default function MeetingKanban() {
               </div>
             )}
 
-            <button
-              onClick={fetchData}
-              className="p-2 text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-            </button>
+            {/* Refresh with last synced */}
+            <div className="flex items-center gap-2">
+              {lastSynced && (
+                <span className="text-xs text-slate-400 dark:text-neutral-500 hidden sm:inline">
+                  {lastSynced.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                </span>
+              )}
+              <button
+                onClick={fetchData}
+                className="p-2 text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                title={lastSynced ? `Last synced: ${lastSynced.toLocaleTimeString()}` : 'Refresh'}
+              >
+                <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+              </button>
+            </div>
           </div>
         </div>
       </header>
