@@ -584,13 +584,16 @@ function SkeletonCard() {
   );
 }
 
-function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackground, canNotify }) {
+function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackground, canNotify, onBulkSubmit }) {
   const [title, setTitle] = useState('');
   const [transcript, setTranscript] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
+  const [fileQueue, setFileQueue] = useState([]); // Queue for bulk upload
+  const [bulkMode, setBulkMode] = useState(false);
   const fileInputRef = useRef(null);
+  const bulkFileInputRef = useRef(null);
 
   // Clear form when modal opens
   useEffect(() => {
@@ -599,8 +602,41 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
       setTranscript('');
       setUploadedFile(null);
       setUploadError(null);
+      setFileQueue([]);
+      setBulkMode(false);
     }
   }, [isOpen]);
+
+  // Parse a single file and return the text
+  const parseFile = async (file) => {
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        const base64Data = result.split(',')[1];
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const response = await fetch('/api/parse-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file: base64,
+        filename: file.name,
+        type: file.type
+      })
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      return { success: true, text: data.text, filename: file.name };
+    } else {
+      return { success: false, error: data.error, filename: file.name };
+    }
+  };
 
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
@@ -626,33 +662,10 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
     setUploadError(null);
 
     try {
-      // Read file as base64
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result;
-          const base64Data = result.split(',')[1];
-          resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      const result = await parseFile(file);
 
-      // Send to API for parsing
-      const response = await fetch('/api/parse-file', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          file: base64,
-          filename: file.name,
-          type: file.type
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setTranscript(data.text);
+      if (result.success) {
+        setTranscript(result.text);
         setUploadedFile(file.name);
         // Try to extract title from filename
         if (!title) {
@@ -660,7 +673,7 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
           setTitle(nameWithoutExt);
         }
       } else {
-        setUploadError(data.error || 'Failed to parse file');
+        setUploadError(result.error || 'Failed to parse file');
       }
     } catch (err) {
       console.error('File upload error:', err);
@@ -674,6 +687,71 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
     }
   };
 
+  const handleBulkFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Validate all files
+    const validTypes = ['application/pdf', 'text/plain'];
+    const validExtensions = ['.pdf', '.txt'];
+
+    const validFiles = files.filter(file => {
+      const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+      const hasValidType = validTypes.includes(file.type);
+      const validSize = file.size <= 10 * 1024 * 1024;
+      return (hasValidType || hasValidExtension) && validSize;
+    });
+
+    if (validFiles.length === 0) {
+      setUploadError('No valid PDF or TXT files selected');
+      return;
+    }
+
+    if (validFiles.length < files.length) {
+      setUploadError(`${files.length - validFiles.length} file(s) skipped (invalid type or too large)`);
+    }
+
+    // Add files to queue with pending status
+    const newQueue = validFiles.map(file => ({
+      file,
+      name: file.name,
+      status: 'pending', // pending, parsing, parsed, error
+      text: null,
+      error: null
+    }));
+
+    setFileQueue(newQueue);
+    setBulkMode(true);
+
+    // Reset file input
+    if (bulkFileInputRef.current) {
+      bulkFileInputRef.current.value = '';
+    }
+
+    // Parse all files
+    for (let i = 0; i < newQueue.length; i++) {
+      setFileQueue(prev => prev.map((item, idx) =>
+        idx === i ? { ...item, status: 'parsing' } : item
+      ));
+
+      try {
+        const result = await parseFile(newQueue[i].file);
+        setFileQueue(prev => prev.map((item, idx) =>
+          idx === i ? {
+            ...item,
+            status: result.success ? 'parsed' : 'error',
+            text: result.text,
+            error: result.error
+          } : item
+        ));
+      } catch (err) {
+        setFileQueue(prev => prev.map((item, idx) =>
+          idx === i ? { ...item, status: 'error', error: 'Failed to parse' } : item
+        ));
+      }
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (transcript.trim()) {
@@ -681,15 +759,34 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
     }
   };
 
+  const handleBulkSubmit = () => {
+    const parsedFiles = fileQueue.filter(f => f.status === 'parsed' && f.text);
+    if (parsedFiles.length > 0 && onBulkSubmit) {
+      onBulkSubmit(parsedFiles.map(f => ({
+        title: f.name.replace(/\.(pdf|txt)$/i, ''),
+        transcript: f.text
+      })));
+    }
+  };
+
+  const removeFromQueue = (index) => {
+    setFileQueue(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleClose = () => {
     setTitle('');
     setTranscript('');
     setUploadedFile(null);
     setUploadError(null);
+    setFileQueue([]);
+    setBulkMode(false);
     onClose();
   };
 
   if (!isOpen) return null;
+
+  const parsedCount = fileQueue.filter(f => f.status === 'parsed').length;
+  const parsingCount = fileQueue.filter(f => f.status === 'parsing').length;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -703,106 +800,215 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
         )}
 
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Add Meeting Transcript</h2>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white">
+            {bulkMode ? `Bulk Import (${parsedCount} files ready)` : 'Add Meeting Transcript'}
+          </h2>
           <button onClick={handleClose} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-200" disabled={isProcessing}>
             <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300 mb-1">
-              Meeting Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Sprint Planning, Client Call, 1:1 with Sarah"
-              className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
-              disabled={isProcessing}
-            />
-          </div>
+        {bulkMode ? (
+          /* Bulk Mode UI */
+          <div className="p-4">
+            <div className="mb-4 max-h-[400px] overflow-y-auto space-y-2">
+              {fileQueue.map((item, idx) => (
+                <div
+                  key={idx}
+                  className={`flex items-center justify-between p-3 rounded-lg border ${
+                    item.status === 'parsed' ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30' :
+                    item.status === 'error' ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30' :
+                    item.status === 'parsing' ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30' :
+                    'bg-slate-50 dark:bg-neutral-800 border-slate-200 dark:border-neutral-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <File size={16} className={
+                      item.status === 'parsed' ? 'text-emerald-500' :
+                      item.status === 'error' ? 'text-rose-500' :
+                      item.status === 'parsing' ? 'text-blue-500' :
+                      'text-slate-400'
+                    } />
+                    <div>
+                      <p className="text-sm font-medium text-slate-700 dark:text-neutral-200">{item.name}</p>
+                      {item.status === 'parsing' && (
+                        <p className="text-xs text-blue-600 dark:text-blue-400">Parsing...</p>
+                      )}
+                      {item.status === 'parsed' && (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">Ready to import</p>
+                      )}
+                      {item.status === 'error' && (
+                        <p className="text-xs text-rose-600 dark:text-rose-400">{item.error}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {item.status === 'parsing' && (
+                      <RefreshCw size={14} className="animate-spin text-blue-500" />
+                    )}
+                    {item.status === 'parsed' && (
+                      <CheckCircle2 size={16} className="text-emerald-500" />
+                    )}
+                    <button
+                      onClick={() => removeFromQueue(idx)}
+                      className="p-1 text-slate-400 hover:text-rose-500"
+                      title="Remove"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300">
-                Transcript <span className="text-rose-500">*</span>
-              </label>
-              <div className="flex items-center gap-2">
-                {uploadedFile && (
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                    <File size={12} />
-                    {uploadedFile}
-                  </span>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.txt,application/pdf,text/plain"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  disabled={isProcessing || isUploading}
-                />
+            <div className="flex justify-between items-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkMode(false);
+                  setFileQueue([]);
+                }}
+                className="text-sm text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-200"
+              >
+                Switch to single file mode
+              </button>
+              <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isProcessing || isUploading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-neutral-300 bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition-colors disabled:opacity-50"
+                  onClick={handleClose}
+                  disabled={isProcessing}
+                  className="px-4 py-2 text-slate-600 dark:text-neutral-300 hover:text-slate-800 dark:hover:text-slate-100 font-medium disabled:opacity-50"
                 >
-                  {isUploading ? (
-                    <>
-                      <RefreshCw size={14} className="animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={14} />
-                      Upload PDF or TXT
-                    </>
-                  )}
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkSubmit}
+                  disabled={parsedCount === 0 || parsingCount > 0 || isProcessing}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Sparkles size={16} />
+                  Import {parsedCount} File{parsedCount !== 1 ? 's' : ''}
                 </button>
               </div>
             </div>
-            {uploadError && (
-              <p className="text-xs text-rose-500 mb-2">{uploadError}</p>
-            )}
-            <textarea
-              value={transcript}
-              onChange={(e) => {
-                setTranscript(e.target.value);
-                if (uploadedFile) setUploadedFile(null);
-              }}
-              placeholder="Paste your meeting transcript here, or upload a PDF/TXT file..."
-              rows={12}
-              required
-              disabled={isProcessing || isUploading}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono text-sm disabled:bg-slate-50 dark:disabled:bg-slate-900 dark:bg-neutral-950 dark:text-white"
-            />
-            <p className="text-xs text-slate-400 dark:text-neutral-500 mt-1">
-              Paste the full transcript or upload a file. The AI will extract genuine action items and commitments.
-            </p>
           </div>
+        ) : (
+          /* Single File Mode UI */
+          <form onSubmit={handleSubmit} className="p-4">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300 mb-1">
+                Meeting Title
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g., Sprint Planning, Client Call, 1:1 with Sarah"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                disabled={isProcessing}
+              />
+            </div>
 
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={isProcessing}
-              className="px-4 py-2 text-slate-600 dark:text-neutral-300 hover:text-slate-800 dark:hover:text-slate-100 font-medium disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!transcript.trim() || isProcessing}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              <Sparkles size={16} />
-              Extract Action Items
-            </button>
-          </div>
-        </form>
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300">
+                  Transcript <span className="text-rose-500">*</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  {uploadedFile && (
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <File size={12} />
+                      {uploadedFile}
+                    </span>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.txt,application/pdf,text/plain"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    disabled={isProcessing || isUploading}
+                  />
+                  <input
+                    ref={bulkFileInputRef}
+                    type="file"
+                    accept=".pdf,.txt,application/pdf,text/plain"
+                    onChange={handleBulkFileSelect}
+                    className="hidden"
+                    multiple
+                    disabled={isProcessing || isUploading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => bulkFileInputRef.current?.click()}
+                    disabled={isProcessing || isUploading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-orange-500 bg-indigo-50 dark:bg-orange-500/10 hover:bg-indigo-100 dark:hover:bg-orange-500/20 rounded-lg transition-colors disabled:opacity-50"
+                    title="Select multiple files to import at once"
+                  >
+                    <Plus size={14} />
+                    Bulk Import
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isProcessing || isUploading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-neutral-300 bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {isUploading ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={14} />
+                        Upload File
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+              {uploadError && (
+                <p className="text-xs text-rose-500 mb-2">{uploadError}</p>
+              )}
+              <textarea
+                value={transcript}
+                onChange={(e) => {
+                  setTranscript(e.target.value);
+                  if (uploadedFile) setUploadedFile(null);
+                }}
+                placeholder="Paste your meeting transcript here, or upload a PDF/TXT file..."
+                rows={12}
+                required
+                disabled={isProcessing || isUploading}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono text-sm disabled:bg-slate-50 dark:disabled:bg-slate-900 dark:bg-neutral-950 dark:text-white"
+              />
+              <p className="text-xs text-slate-400 dark:text-neutral-500 mt-1">
+                Paste the full transcript or upload a file. Use <strong>Bulk Import</strong> to process multiple files at once.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={isProcessing}
+                className="px-4 py-2 text-slate-600 dark:text-neutral-300 hover:text-slate-800 dark:hover:text-slate-100 font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!transcript.trim() || isProcessing}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Sparkles size={16} />
+                Extract Action Items
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -2035,6 +2241,53 @@ export default function MeetingKanban() {
     }
   };
 
+  // Bulk import handler - processes multiple files sequentially
+  const handleBulkSubmit = async (files) => {
+    setIsProcessing(true);
+    setProcessingInBackground(true); // Auto-enable background mode for bulk
+    setShowPasteModal(false);
+    setError(null);
+
+    let successCount = 0;
+    let totalTasks = 0;
+
+    for (const file of files) {
+      try {
+        const response = await fetch('/api/webhook', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: file.transcript,
+            title: file.title,
+            date: new Date().toISOString().split('T')[0]
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setMeetings(prev => [data.meeting, ...prev]);
+          setTasks(prev => [...data.tasks, ...prev]);
+          successCount++;
+          totalTasks += data.tasks.length;
+        }
+      } catch (err) {
+        console.error(`Failed to process ${file.title}:`, err);
+      }
+    }
+
+    setIsProcessing(false);
+    setProcessingInBackground(false);
+
+    // Send completion notification
+    if (canNotify) {
+      sendNotification(
+        'Bulk import complete!',
+        `Processed ${successCount}/${files.length} files, extracted ${totalTasks} action items`
+      );
+    }
+  };
+
   // Handle switching to background processing
   const handleProcessInBackground = async () => {
     // Request notification permission if not already granted
@@ -2895,6 +3148,7 @@ export default function MeetingKanban() {
         isOpen={showPasteModal}
         onClose={() => setShowPasteModal(false)}
         onSubmit={handlePasteSubmit}
+        onBulkSubmit={handleBulkSubmit}
         isProcessing={isProcessing}
         onProcessInBackground={handleProcessInBackground}
         canNotify={canNotify}
