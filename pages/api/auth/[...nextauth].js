@@ -18,12 +18,10 @@ export const authOptions = {
       },
       // Fetch profile from userinfo endpoint to get the picture
       async profile(profile, tokens) {
-        // Fetch additional profile data including picture from Google
         const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${tokens.access_token}` },
         });
         const userInfo = await res.json();
-        console.log('Google userinfo response:', JSON.stringify(userInfo));
 
         return {
           id: profile.sub,
@@ -43,21 +41,11 @@ export const authOptions = {
       // Reject sign-in for non-allowed emails
       return false;
     },
-    async jwt({ token, user, account, profile }) {
-      // Debug: always log to see what's happening
-      console.log('JWT callback - user:', user ? JSON.stringify(user) : 'undefined');
-      console.log('JWT callback - profile:', profile ? JSON.stringify(profile) : 'undefined');
-      console.log('JWT callback - account:', account ? JSON.stringify(account) : 'undefined');
-
-      // On initial sign in, capture picture from profile or user
+    async jwt({ token, user }) {
+      // On initial sign in, capture picture from user
       if (user?.image) {
         token.picture = user.image;
       }
-      if (profile?.picture) {
-        token.picture = profile.picture;
-      }
-
-      console.log('JWT callback - final token:', JSON.stringify(token));
       return token;
     },
     async session({ session, token }) {
