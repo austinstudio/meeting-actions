@@ -3236,13 +3236,6 @@ export default function MeetingKanban() {
               {/* Fixed Header Section */}
               <div className="px-4 pb-2 flex-shrink-0">
                 <div className="flex items-center gap-2 mb-3">
-                  <button
-                    onClick={toggleSidebar}
-                    className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-                    title="Collapse sidebar (⌘B)"
-                  >
-                    <PanelLeftClose size={18} />
-                  </button>
                   <h2 className="font-semibold text-slate-700 dark:text-slate-200">Meetings</h2>
                   <button
                     onClick={() => setShowPasteModal(true)}
@@ -3251,6 +3244,14 @@ export default function MeetingKanban() {
                   >
                     <Plus size={12} />
                     Add
+                  </button>
+                  <div className="flex-1" />
+                  <button
+                    onClick={toggleSidebar}
+                    className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                    title="Collapse sidebar (⌘B)"
+                  >
+                    <PanelLeftClose size={18} />
                   </button>
                 </div>
 
