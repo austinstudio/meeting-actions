@@ -165,7 +165,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
       draggable={!isTrashView}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className={`bg-white dark:bg-neutral-900 rounded-lg border border-slate-200 dark:border-neutral-800 ${density.padding} ${isTrashView ? 'cursor-default opacity-75' : 'cursor-grab active:cursor-grabbing'} shadow-sm hover:shadow-md transition-all relative group ${isDragging ? 'opacity-50 rotate-2' : ''} ${task.pinned ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
+      className={`bg-white dark:bg-neutral-900 rounded-lg border border-slate-200 dark:border-neutral-800 ${density.padding} ${isTrashView ? 'cursor-default opacity-75' : 'cursor-grab active:cursor-grabbing'} shadow-sm hover:shadow-md transition-all relative group/card ${isDragging ? 'opacity-50 rotate-2' : ''} ${task.pinned ? 'ring-2 ring-amber-400 dark:ring-amber-500' : ''}`}
     >
       {/* Pin indicator */}
       {task.pinned && (
@@ -175,7 +175,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
       )}
 
       {/* Action buttons - different for trash view */}
-      <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-md px-1 py-0.5 shadow-sm">
+      <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover/card:opacity-100 transition-opacity bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-md px-1 py-0.5 shadow-sm">
         {isTrashView ? (
           <>
             <button
