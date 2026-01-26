@@ -3170,41 +3170,39 @@ export default function MeetingKanban() {
       <div className="flex">
         {/* Sidebar */}
         <aside className={`${sidebarCollapsed ? 'w-16' : 'w-80'} border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 h-[calc(100vh-73px)] transition-all duration-300 ease-in-out flex flex-col overflow-hidden`}>
-          {/* Collapse Toggle */}
-          <div className={`p-2 ${sidebarCollapsed ? 'flex justify-center' : 'flex justify-end'}`}>
-            <button
-              onClick={toggleSidebar}
-              className="p-2 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-              title={sidebarCollapsed ? 'Expand sidebar (⌘B)' : 'Collapse sidebar (⌘B)'}
-            >
-              {sidebarCollapsed ? <PanelLeft size={20} /> : <PanelLeftClose size={20} />}
-            </button>
-          </div>
-
           {sidebarCollapsed ? (
             /* Collapsed Sidebar */
-            <div className="flex flex-col items-center gap-2 px-2">
+            <div className="flex flex-col items-center gap-2 p-2">
+              {/* Expand button */}
+              <button
+                onClick={toggleSidebar}
+                className="p-2 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                title="Expand sidebar (⌘B)"
+              >
+                <PanelLeft size={20} />
+              </button>
+
               {/* Add Meeting Button - Icon only */}
               <button
                 onClick={() => setShowPasteModal(true)}
-                className="w-12 h-12 flex items-center justify-center bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                className="w-10 h-10 flex items-center justify-center bg-indigo-600 dark:bg-orange-500 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors"
                 title="Add Meeting Transcript"
               >
-                <Plus size={20} />
+                <Plus size={18} />
               </button>
 
               {/* Meetings count badge */}
               <button
                 onClick={toggleSidebar}
-                className="w-12 h-12 flex flex-col items-center justify-center text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                className="w-10 h-10 flex flex-col items-center justify-center text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
                 title={`${meetings.length} meetings - Click to expand`}
               >
-                <FileText size={18} />
-                <span className="text-xs mt-0.5">{meetings.length}</span>
+                <FileText size={16} />
+                <span className="text-[10px] mt-0.5">{meetings.length}</span>
               </button>
 
               {/* Divider */}
-              <div className="w-8 h-px bg-slate-200 dark:bg-neutral-800 my-2" />
+              <div className="w-8 h-px bg-slate-200 dark:bg-neutral-800 my-1" />
 
               {/* Archive button */}
               <button
@@ -3212,11 +3210,11 @@ export default function MeetingKanban() {
                   setShowArchived(!showArchived);
                   if (showTrash) setShowTrash(false);
                 }}
-                className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg transition-colors ${showArchived ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                className={`w-10 h-10 flex flex-col items-center justify-center rounded-lg transition-colors ${showArchived ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
                 title={showArchived ? 'Show active tasks' : `View archived (${stats.archived})`}
               >
-                <Archive size={18} />
-                {stats.archived > 0 && <span className="text-xs mt-0.5">{stats.archived}</span>}
+                <Archive size={16} />
+                {stats.archived > 0 && <span className="text-[10px] mt-0.5">{stats.archived}</span>}
               </button>
 
               {/* Trash button */}
@@ -3225,11 +3223,11 @@ export default function MeetingKanban() {
                   setShowTrash(!showTrash);
                   if (showArchived) setShowArchived(false);
                 }}
-                className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg transition-colors ${showTrash ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                className={`w-10 h-10 flex flex-col items-center justify-center rounded-lg transition-colors ${showTrash ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
                 title={showTrash ? 'Back to tasks' : `View trash (${stats.trash})`}
               >
-                <Trash2 size={18} />
-                {stats.trash > 0 && <span className="text-xs mt-0.5">{stats.trash}</span>}
+                <Trash2 size={16} />
+                {stats.trash > 0 && <span className="text-[10px] mt-0.5">{stats.trash}</span>}
               </button>
             </div>
           ) : (
@@ -3237,14 +3235,21 @@ export default function MeetingKanban() {
             <div className="flex-1 flex flex-col min-h-0">
               {/* Fixed Header Section */}
               <div className="px-4 pb-2 flex-shrink-0">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <button
+                    onClick={toggleSidebar}
+                    className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                    title="Collapse sidebar (⌘B)"
+                  >
+                    <PanelLeftClose size={18} />
+                  </button>
                   <h2 className="font-semibold text-slate-700 dark:text-slate-200">Meetings</h2>
                   <button
                     onClick={() => setShowPasteModal(true)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-indigo-600 dark:bg-orange-500 text-white rounded-lg font-medium hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-indigo-600 dark:bg-orange-500 text-white rounded-md font-medium hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors"
                     title="Add Meeting Transcript"
                   >
-                    <Plus size={14} />
+                    <Plus size={12} />
                     Add
                   </button>
                 </div>
