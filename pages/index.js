@@ -3237,17 +3237,16 @@ export default function MeetingKanban() {
             <div className="flex-1 flex flex-col min-h-0">
               {/* Fixed Header Section */}
               <div className="px-4 pb-2 flex-shrink-0">
-                {/* Add Meeting Button */}
-                <button
-                  onClick={() => setShowPasteModal(true)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 dark:bg-orange-500 text-white rounded-lg font-medium hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors mb-4"
-                >
-                  <Plus size={18} />
-                  Add Meeting Transcript
-                </button>
-
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="font-semibold text-slate-700 dark:text-slate-200">Meetings</h2>
+                  <button
+                    onClick={() => setShowPasteModal(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-indigo-600 dark:bg-orange-500 text-white rounded-lg font-medium hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors"
+                    title="Add Meeting Transcript"
+                  >
+                    <Plus size={14} />
+                    Add
+                  </button>
                 </div>
 
                 <button
