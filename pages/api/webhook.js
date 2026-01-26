@@ -258,6 +258,8 @@ export default async function handler(req, res) {
         id: meetingId,
         userId,
         title: meetingTitle,
+        sourceFileName: title || null,  // Original filename before AI extraction
+        transcript: transcript,          // Store full transcript for context
         date: meetingDate,
         duration: extracted.meeting.duration || null,
         participants: extracted.meeting.participants || [],
@@ -266,7 +268,9 @@ export default async function handler(req, res) {
         processedAt: new Date().toISOString()
       };
 
-      // Add tasks with generated IDs
+      // Add tasks with generated IDs and initial activity entry
+      const createdAt = new Date().toISOString();
+      const sourceLabel = title || meetingTitle;
       const newTasks = (extracted.tasks || []).map((task, index) => ({
         id: `t_${Date.now()}_${index}`,
         userId,
@@ -279,7 +283,14 @@ export default async function handler(req, res) {
         priority: task.priority || 'medium',
         person: task.person || null,
         context: task.context || null,
-        createdAt: new Date().toISOString()
+        createdAt: createdAt,
+        activity: [{
+          id: `act_${Date.now()}_${index}`,
+          type: 'created',
+          source: sourceLabel,
+          meetingId: meetingId,
+          timestamp: createdAt
+        }]
       }));
 
       // Get existing data from KV

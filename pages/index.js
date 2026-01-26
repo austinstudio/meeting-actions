@@ -464,7 +464,7 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
   );
 }
 
-function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, onEdit, isEmpty, hasUncategorized }) {
+function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, onEdit, onViewTranscript, isEmpty, hasUncategorized }) {
   const [showActions, setShowActions] = useState(false);
 
   return (
@@ -513,6 +513,18 @@ function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, onEdit
       {/* Action buttons */}
       {showActions && (
         <div className="absolute top-2 right-2 flex items-center gap-1">
+          {meeting.transcript && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewTranscript(meeting);
+              }}
+              className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-indigo-500 dark:hover:text-orange-500 hover:bg-indigo-50 dark:hover:bg-orange-900/30 rounded transition-colors"
+              title="View transcript"
+            >
+              <FileText size={14} />
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -650,6 +662,68 @@ function EditMeetingModal({ isOpen, meeting, onClose, onSave }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// Transcript Modal - View original transcript
+function TranscriptModal({ isOpen, meeting, onClose }) {
+  if (!isOpen || !meeting) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
+          <div>
+            <h3 className="font-semibold text-lg text-slate-800 dark:text-white">
+              Transcript
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-neutral-400 mt-0.5">
+              {meeting.sourceFileName || meeting.title}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-slate-600 dark:text-neutral-400 dark:hover:text-white"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {meeting.transcript ? (
+            <pre className="whitespace-pre-wrap text-sm text-slate-700 dark:text-neutral-300 font-mono leading-relaxed">
+              {meeting.transcript}
+            </pre>
+          ) : (
+            <div className="text-center py-8 text-slate-400 dark:text-neutral-500">
+              <FileText size={32} className="mx-auto mb-2 opacity-50" />
+              <p>No transcript available</p>
+              <p className="text-xs mt-1">This meeting was created before transcript storage was enabled</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-neutral-800">
+          <button
+            onClick={() => {
+              if (meeting.transcript) {
+                navigator.clipboard.writeText(meeting.transcript);
+              }
+            }}
+            disabled={!meeting.transcript}
+            className="px-4 py-2 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            Copy to clipboard
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm bg-indigo-600 dark:bg-orange-500 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1403,6 +1477,10 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
 
     if (activity.type === 'comment') {
       return 'added a comment';
+    }
+
+    if (activity.type === 'created') {
+      return activity.source ? `extracted from "${activity.source}"` : 'task created';
     }
 
     const fieldLabel = fieldLabels[activity.field] || activity.field;
@@ -2287,6 +2365,7 @@ export default function MeetingKanban() {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false });
   const [editingTask, setEditingTask] = useState(null);
   const [editingMeeting, setEditingMeeting] = useState(null);
+  const [viewingTranscript, setViewingTranscript] = useState(null);
   const [addingToColumn, setAddingToColumn] = useState(null);
   const [draggingColumn, setDraggingColumn] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -3297,6 +3376,7 @@ export default function MeetingKanban() {
                           onClick={() => setSelectedMeeting(meeting.id === selectedMeeting ? null : meeting.id)}
                           onDelete={handleDeleteMeeting}
                           onEdit={setEditingMeeting}
+                          onViewTranscript={setViewingTranscript}
                           isEmpty={meeting.taskCount === 0}
                           hasUncategorized={meeting.uncategorizedCount > 0}
                         />
@@ -3553,6 +3633,12 @@ export default function MeetingKanban() {
         meeting={editingMeeting}
         onClose={() => setEditingMeeting(null)}
         onSave={handleUpdateMeeting}
+      />
+
+      <TranscriptModal
+        isOpen={!!viewingTranscript}
+        meeting={viewingTranscript}
+        onClose={() => setViewingTranscript(null)}
       />
 
       <AddTaskModal
