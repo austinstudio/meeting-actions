@@ -3,7 +3,7 @@
 ## High Impact, Medium Complexity
 
 ### 1. Search & Quick Find
-- Global search across tasks and meetings
+Complete - Global search across tasks and meetings
 - Filter by date range, priority, keywords
 - Search within meeting transcripts
 
@@ -23,11 +23,12 @@
 - Bulk edit (change owner, due date, priority)
 - Bulk move to different column
 - Bulk delete/archive
+- PRIORITY - Bulk imports of PDF/TXT documents
 
 ### 5. Comments & Activity Log
-- Add notes/updates to tasks
-- See task history (who changed what, when)
-- @mention people in comments
+Complete - Add notes/updates to tasks
+Complete - See task history (who changed what, when)
+Complete - @mention people in comments
 
 ## High Impact, Lower Complexity
 
@@ -54,10 +55,11 @@
 - Suggest archiving old completed tasks
 
 ### 10. Tags/Labels
-- Add custom tags (#urgent, #client, #bug, #feature)
-- Color-coded labels
-- Filter by tags
-- Auto-tag based on meeting content
+COMPLETE - Add custom tags (#urgent, #client, #bug, #feature)
+COMPLETE - Color-coded labels
+COMPLETE - Filter by tags
+TEST - Auto-tag based on meeting content
+PRIORITY - Cleaner design for filters and tags
 
 ## Medium Impact, Higher Value
 
@@ -74,9 +76,9 @@
 - Send reminder emails to task owners
 
 ### 13. Subtasks/Checklists
-- Break down complex tasks into steps
-- Show progress (3/5 subtasks complete)
-- Collapse/expand subtasks
+COMPLETE - Break down complex tasks into steps
+COMPLETE - Show progress (3/5 subtasks complete)
+COMPLETE - Collapse/expand subtasks
 
 ### 14. Time Tracking
 - Log time spent on tasks
