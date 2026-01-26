@@ -401,7 +401,7 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={(e) => handleDrop(e, columnTasks.length)}
-      className={`flex-1 min-w-[280px] max-w-[320px] rounded-xl ${colors.bg} dark:bg-opacity-20 border-2 ${isDragOver ? colors.accent : 'border-transparent'} transition-colors ${isDraggingColumn ? 'opacity-50' : ''}`}
+      className={`flex-1 min-w-[280px] max-w-[320px] rounded-xl ${colors.bg} dark:bg-opacity-20 border-2 ${isDragOver ? colors.accent : 'border-transparent'} transition-colors ${isDraggingColumn ? 'opacity-50' : ''} flex flex-col h-full`}
     >
       <div className="p-3 border-b border-slate-200/50 dark:border-neutral-800/50 cursor-grab active:cursor-grabbing">
         <div className="flex items-center justify-between">
@@ -423,7 +423,7 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
           </div>
         </div>
       </div>
-      <div className="p-2 space-y-2 min-h-[400px] max-h-[calc(100vh-280px)] overflow-y-auto">
+      <div className="p-2 space-y-2 flex-1 overflow-y-auto">
         {/* Show skeletons when processing in background */}
         {showSkeletons && column.id === 'uncategorized' && (
           <>
@@ -3167,9 +3167,9 @@ export default function MeetingKanban() {
         </div>
       </header>
 
-      <div className="flex">
+      <div className="flex pb-5">
         {/* Sidebar */}
-        <aside className={`${sidebarCollapsed ? 'w-16' : 'w-80'} border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 h-[calc(100vh-73px)] transition-all duration-300 ease-in-out flex flex-col overflow-hidden`}>
+        <aside className={`${sidebarCollapsed ? 'w-16' : 'w-80'} border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 h-[calc(100vh-93px)] transition-all duration-300 ease-in-out flex flex-col overflow-hidden`}>
           {sidebarCollapsed ? (
             /* Collapsed Sidebar */
             <div className="flex flex-col items-center gap-2 p-2">
@@ -3354,7 +3354,7 @@ export default function MeetingKanban() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 overflow-x-auto">
+        <main className="flex-1 p-6 overflow-x-auto h-[calc(100vh-93px)] flex flex-col">
           {/* Filters - Compact single row with dropdowns */}
           <div className="flex items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-2 flex-wrap">
@@ -3470,7 +3470,7 @@ export default function MeetingKanban() {
           </div>
 
           {/* Kanban Board */}
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-1 min-h-0">
             {columns.sort((a, b) => a.order - b.order).map(column => (
               <div key={column.id} className="relative group">
                 <Column
