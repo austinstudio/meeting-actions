@@ -3307,45 +3307,25 @@ export default function MeetingKanban() {
               </div>
 
               {/* Fixed Bottom Section - Archive & Trash */}
-              <div className="flex-shrink-0 px-4 pb-4 pt-3 border-t border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-slate-600 dark:text-neutral-300">Archive</h3>
-                  {stats.archived > 0 && (
-                    <span className="text-xs bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 px-2 py-0.5 rounded-full">
-                      {stats.archived}
-                    </span>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <button
-                    onClick={handleArchiveDone}
-                    disabled={(columnStats.find(c => c.id === 'done')?.count || 0) === 0}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Archive size={16} />
-                    Archive completed ({columnStats.find(c => c.id === 'done')?.count || 0})
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowArchived(!showArchived);
-                      if (showTrash) setShowTrash(false);
-                    }}
-                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg ${showArchived ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
-                  >
-                    <FileText size={16} />
-                    {showArchived ? 'Show active tasks' : 'View archived'}
-                  </button>
-                </div>
-
-                {/* Trash */}
-                <div className="flex items-center justify-between mb-2 mt-3">
-                  <h3 className="text-sm font-medium text-slate-600 dark:text-neutral-300">Trash</h3>
-                  {stats.trash > 0 && (
-                    <span className="text-xs bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 px-2 py-0.5 rounded-full">
-                      {stats.trash}
-                    </span>
-                  )}
-                </div>
+              <div className="flex-shrink-0 px-4 pb-4 pt-3 border-t border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 space-y-1">
+                <button
+                  onClick={handleArchiveDone}
+                  disabled={(columnStats.find(c => c.id === 'done')?.count || 0) === 0}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Archive size={16} />
+                  Archive completed ({columnStats.find(c => c.id === 'done')?.count || 0})
+                </button>
+                <button
+                  onClick={() => {
+                    setShowArchived(!showArchived);
+                    if (showTrash) setShowTrash(false);
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg ${showArchived ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                >
+                  <FileText size={16} />
+                  {showArchived ? 'Show active tasks' : `View archived${stats.archived > 0 ? ` (${stats.archived})` : ''}`}
+                </button>
                 <button
                   onClick={() => {
                     setShowTrash(!showTrash);
