@@ -16,6 +16,22 @@ export const authOptions = {
           scope: 'openid email profile',
         },
       },
+      // Fetch profile from userinfo endpoint to get the picture
+      async profile(profile, tokens) {
+        // Fetch additional profile data including picture from Google
+        const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        });
+        const userInfo = await res.json();
+        console.log('Google userinfo response:', JSON.stringify(userInfo));
+
+        return {
+          id: profile.sub,
+          name: profile.name,
+          email: profile.email,
+          image: userInfo.picture,
+        };
+      },
     }),
   ],
   callbacks: {
