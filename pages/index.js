@@ -3128,6 +3128,26 @@ export default function MeetingKanban() {
             <p className="text-sm text-slate-500 dark:text-neutral-400 mt-0.5">Extract and track action items from your meetings</p>
           </div>
           <div className="flex items-center gap-6">
+            {/* Refresh with last synced */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchData}
+                className="p-2 text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                title={lastSynced ? `Last synced: ${lastSynced.toLocaleTimeString()}` : 'Refresh'}
+              >
+                <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+              </button>
+              {lastSynced && (
+                <div className="text-xs text-slate-400 dark:text-neutral-500 hidden sm:block">
+                  <div className="text-[10px] uppercase tracking-wide">Last Updated</div>
+                  <div>{lastSynced.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="w-px h-10 bg-slate-200 dark:bg-neutral-800" />
+
             <div className="flex items-center gap-4 text-sm">
               <div className="text-center">
                 <div className="text-2xl font-bold text-indigo-600 dark:text-orange-500">{stats.mine}</div>
@@ -3220,22 +3240,6 @@ export default function MeetingKanban() {
                 </div>
               </div>
             )}
-
-            {/* Refresh with last synced */}
-            <div className="flex items-center gap-2">
-              {lastSynced && (
-                <span className="text-xs text-slate-400 dark:text-neutral-500 hidden sm:inline">
-                  {lastSynced.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                </span>
-              )}
-              <button
-                onClick={fetchData}
-                className="p-2 text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-                title={lastSynced ? `Last synced: ${lastSynced.toLocaleTimeString()}` : 'Refresh'}
-              >
-                <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-              </button>
-            </div>
           </div>
         </div>
       </header>
