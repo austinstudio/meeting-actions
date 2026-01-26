@@ -11,6 +11,11 @@ export const authOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      authorization: {
+        params: {
+          scope: 'openid email profile',
+        },
+      },
     }),
   ],
   callbacks: {
@@ -23,8 +28,11 @@ export const authOptions = {
       return false;
     },
     async jwt({ token, user, account, profile }) {
-      // On initial sign in, add profile picture to token
-      if (profile) {
+      // On initial sign in, capture picture from profile or user
+      if (user?.image) {
+        token.picture = user.image;
+      }
+      if (profile?.picture) {
         token.picture = profile.picture;
       }
       return token;
