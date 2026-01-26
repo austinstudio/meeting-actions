@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ListChecks, Rows3, Rows4, LayoutList, GripVertical } from 'lucide-react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ChevronLeft, ListChecks, Rows3, Rows4, LayoutList, GripVertical, PanelLeftClose, PanelLeft } from 'lucide-react';
 
 const DEFAULT_COLUMNS = [
   { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
@@ -2066,13 +2066,16 @@ export default function MeetingKanban() {
   const [tagFilter, setTagFilter] = useState([]); // Array of tags to filter by
   const [dueDateFilter, setDueDateFilter] = useState(null); // 'overdue', 'today', 'this-week', 'upcoming', null
   const [viewDensity, setViewDensity] = useState('normal'); // 'compact', 'normal', 'spacious'
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Collapsible sidebar
 
   // Initialize theme from localStorage and system preference
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'system';
     const savedDensity = localStorage.getItem('viewDensity') || 'normal';
+    const savedSidebarState = localStorage.getItem('sidebarCollapsed') === 'true';
     setTheme(savedTheme);
     setViewDensity(savedDensity);
+    setSidebarCollapsed(savedSidebarState);
 
     // Apply theme
     applyTheme(savedTheme);
@@ -2085,7 +2088,24 @@ export default function MeetingKanban() {
       }
     };
     mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+
+    // Keyboard shortcut for sidebar toggle (Cmd/Ctrl + B)
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        setSidebarCollapsed(prev => {
+          const newState = !prev;
+          localStorage.setItem('sidebarCollapsed', String(newState));
+          return newState;
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const applyTheme = (themeValue) => {
@@ -2108,6 +2128,14 @@ export default function MeetingKanban() {
   const changeViewDensity = (density) => {
     setViewDensity(density);
     localStorage.setItem('viewDensity', density);
+  };
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(prev => {
+      const newState = !prev;
+      localStorage.setItem('sidebarCollapsed', String(newState));
+      return newState;
+    });
   };
 
   // Check for overdue tasks and send notification on page load
@@ -2855,128 +2883,195 @@ export default function MeetingKanban() {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-80 border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-4 min-h-[calc(100vh-73px)]">
-          {/* Add Meeting Button */}
-          <button
-            onClick={() => setShowPasteModal(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors mb-4"
-          >
-            <Plus size={18} />
-            Add Meeting Transcript
-          </button>
-
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-slate-700 dark:text-slate-200">Meetings</h2>
-          </div>
-
-          <div className="space-y-2 mb-4">
+        <aside className={`${sidebarCollapsed ? 'w-16' : 'w-80'} border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 min-h-[calc(100vh-73px)] transition-all duration-300 ease-in-out flex flex-col`}>
+          {/* Collapse Toggle */}
+          <div className={`p-2 ${sidebarCollapsed ? 'flex justify-center' : 'flex justify-end'}`}>
             <button
-              onClick={() => setSelectedMeeting(null)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${!selectedMeeting ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+              onClick={toggleSidebar}
+              className="p-2 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+              title={sidebarCollapsed ? 'Expand sidebar (⌘B)' : 'Collapse sidebar (⌘B)'}
             >
-              All Meetings ({meetings.length})
+              {sidebarCollapsed ? <PanelLeft size={20} /> : <PanelLeftClose size={20} />}
             </button>
           </div>
 
-          {loading && meetings.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 dark:text-neutral-500">
-              <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
-              <p className="text-sm">Loading...</p>
-            </div>
-          ) : meetings.length === 0 ? (
-            <div className="text-center py-8 text-slate-400 dark:text-neutral-500">
-              <FileText size={32} className="mx-auto mb-2 opacity-50" />
-              <p className="text-sm mb-2">No meetings yet</p>
-              <p className="text-xs">Click "Add Meeting Transcript" to get started</p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[calc(100vh-400px)] overflow-y-auto">
-              {meetings
-                .map(meeting => ({
-                  ...meeting,
-                  taskCount: tasks.filter(t => t.meetingId === meeting.id && !t.archived && !t.deleted).length
-                }))
-                .filter(meeting => showEmptyMeetings || meeting.taskCount > 0)
-                .map(meeting => (
-                  <MeetingCard
-                    key={meeting.id}
-                    meeting={meeting}
-                    taskCount={meeting.taskCount}
-                    isSelected={selectedMeeting === meeting.id}
-                    onClick={() => setSelectedMeeting(meeting.id === selectedMeeting ? null : meeting.id)}
-                    onDelete={handleDeleteMeeting}
-                    isEmpty={meeting.taskCount === 0}
-                  />
-                ))}
-              {/* Show empty meetings toggle */}
-              {meetings.some(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0) && (
-                <button
-                  onClick={() => setShowEmptyMeetings(!showEmptyMeetings)}
-                  className="w-full text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-slate-400 py-2 flex items-center justify-center gap-1"
-                >
-                  {showEmptyMeetings ? (
-                    <>Hide empty meetings</>
-                  ) : (
-                    <>Show {meetings.filter(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0).length} empty meetings</>
-                  )}
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Archive & Trash section */}
-          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-neutral-800">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-slate-600 dark:text-neutral-300">Archive</h3>
-              {stats.archived > 0 && (
-                <span className="text-xs bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 px-2 py-0.5 rounded-full">
-                  {stats.archived}
-                </span>
-              )}
-            </div>
-            <div className="space-y-2">
+          {sidebarCollapsed ? (
+            /* Collapsed Sidebar */
+            <div className="flex flex-col items-center gap-2 px-2">
+              {/* Add Meeting Button - Icon only */}
               <button
-                onClick={handleArchiveDone}
-                disabled={(columnStats.find(c => c.id === 'done')?.count || 0) === 0}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setShowPasteModal(true)}
+                className="w-12 h-12 flex items-center justify-center bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                title="Add Meeting Transcript"
               >
-                <Archive size={16} />
-                Archive completed ({columnStats.find(c => c.id === 'done')?.count || 0})
+                <Plus size={20} />
               </button>
+
+              {/* Meetings count badge */}
+              <button
+                onClick={toggleSidebar}
+                className="w-12 h-12 flex flex-col items-center justify-center text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                title={`${meetings.length} meetings - Click to expand`}
+              >
+                <FileText size={18} />
+                <span className="text-xs mt-0.5">{meetings.length}</span>
+              </button>
+
+              {/* Divider */}
+              <div className="w-8 h-px bg-slate-200 dark:bg-neutral-800 my-2" />
+
+              {/* Archive button */}
               <button
                 onClick={() => {
                   setShowArchived(!showArchived);
                   if (showTrash) setShowTrash(false);
                 }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showArchived ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg transition-colors ${showArchived ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                title={showArchived ? 'Show active tasks' : `View archived (${stats.archived})`}
               >
-                <FileText size={16} />
-                {showArchived ? 'Show active tasks' : 'View archived'}
+                <Archive size={18} />
+                {stats.archived > 0 && <span className="text-xs mt-0.5">{stats.archived}</span>}
               </button>
-            </div>
 
-            {/* Trash */}
-            <div className="flex items-center justify-between mb-3 mt-4">
-              <h3 className="text-sm font-medium text-slate-600 dark:text-neutral-300">Trash</h3>
-              {stats.trash > 0 && (
-                <span className="text-xs bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 px-2 py-0.5 rounded-full">
-                  {stats.trash}
-                </span>
-              )}
-            </div>
-            <div className="space-y-2">
+              {/* Trash button */}
               <button
                 onClick={() => {
                   setShowTrash(!showTrash);
                   if (showArchived) setShowArchived(false);
                 }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showTrash ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg transition-colors ${showTrash ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                title={showTrash ? 'Back to tasks' : `View trash (${stats.trash})`}
               >
-                <Trash2 size={16} />
-                {showTrash ? 'Back to tasks' : `View trash${stats.trash > 0 ? ` (${stats.trash})` : ''}`}
+                <Trash2 size={18} />
+                {stats.trash > 0 && <span className="text-xs mt-0.5">{stats.trash}</span>}
               </button>
             </div>
-          </div>
+          ) : (
+            /* Expanded Sidebar */
+            <div className="flex-1 overflow-hidden flex flex-col px-4 pb-4">
+              {/* Add Meeting Button */}
+              <button
+                onClick={() => setShowPasteModal(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors mb-4"
+              >
+                <Plus size={18} />
+                Add Meeting Transcript
+              </button>
+
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold text-slate-700 dark:text-slate-200">Meetings</h2>
+              </div>
+
+              <div className="space-y-2 mb-4">
+                <button
+                  onClick={() => setSelectedMeeting(null)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${!selectedMeeting ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                >
+                  All Meetings ({meetings.length})
+                </button>
+              </div>
+
+              {loading && meetings.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 dark:text-neutral-500">
+                  <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
+                  <p className="text-sm">Loading...</p>
+                </div>
+              ) : meetings.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 dark:text-neutral-500">
+                  <FileText size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-sm mb-2">No meetings yet</p>
+                  <p className="text-xs">Click "Add Meeting Transcript" to get started</p>
+                </div>
+              ) : (
+                <div className="space-y-2 flex-1 overflow-y-auto">
+                  {meetings
+                    .map(meeting => ({
+                      ...meeting,
+                      taskCount: tasks.filter(t => t.meetingId === meeting.id && !t.archived && !t.deleted).length
+                    }))
+                    .filter(meeting => showEmptyMeetings || meeting.taskCount > 0)
+                    .map(meeting => (
+                      <MeetingCard
+                        key={meeting.id}
+                        meeting={meeting}
+                        taskCount={meeting.taskCount}
+                        isSelected={selectedMeeting === meeting.id}
+                        onClick={() => setSelectedMeeting(meeting.id === selectedMeeting ? null : meeting.id)}
+                        onDelete={handleDeleteMeeting}
+                        isEmpty={meeting.taskCount === 0}
+                      />
+                    ))}
+                  {/* Show empty meetings toggle */}
+                  {meetings.some(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0) && (
+                    <button
+                      onClick={() => setShowEmptyMeetings(!showEmptyMeetings)}
+                      className="w-full text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-slate-400 py-2 flex items-center justify-center gap-1"
+                    >
+                      {showEmptyMeetings ? (
+                        <>Hide empty meetings</>
+                      ) : (
+                        <>Show {meetings.filter(m => tasks.filter(t => t.meetingId === m.id && !t.archived && !t.deleted).length === 0).length} empty meetings</>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Archive & Trash section */}
+              <div className="mt-4 pt-4 border-t border-slate-200 dark:border-neutral-800">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-slate-600 dark:text-neutral-300">Archive</h3>
+                  {stats.archived > 0 && (
+                    <span className="text-xs bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 px-2 py-0.5 rounded-full">
+                      {stats.archived}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <button
+                    onClick={handleArchiveDone}
+                    disabled={(columnStats.find(c => c.id === 'done')?.count || 0) === 0}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Archive size={16} />
+                    Archive completed ({columnStats.find(c => c.id === 'done')?.count || 0})
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowArchived(!showArchived);
+                      if (showTrash) setShowTrash(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showArchived ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                  >
+                    <FileText size={16} />
+                    {showArchived ? 'Show active tasks' : 'View archived'}
+                  </button>
+                </div>
+
+                {/* Trash */}
+                <div className="flex items-center justify-between mb-3 mt-4">
+                  <h3 className="text-sm font-medium text-slate-600 dark:text-neutral-300">Trash</h3>
+                  {stats.trash > 0 && (
+                    <span className="text-xs bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 px-2 py-0.5 rounded-full">
+                      {stats.trash}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      setShowTrash(!showTrash);
+                      if (showArchived) setShowArchived(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg ${showTrash ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                  >
+                    <Trash2 size={16} />
+                    {showTrash ? 'Back to tasks' : `View trash${stats.trash > 0 ? ` (${stats.trash})` : ''}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </aside>
 
         {/* Main Content */}
