@@ -237,9 +237,8 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
 
       {/* Meeting source tag */}
       {meeting && (
-        <div className="flex items-center gap-1.5 mb-2 -mt-1 pr-12">
-          <FileText size={12} className="text-indigo-400 flex-shrink-0" />
-          <span className="text-xs text-indigo-600 dark:text-orange-500 font-medium truncate" title={meeting.title}>
+        <div className="mb-2 -mt-1 pr-12">
+          <span className="text-xs text-indigo-600 dark:text-orange-500 font-medium truncate block" title={meeting.title}>
             {meeting.title}
           </span>
         </div>
@@ -299,7 +298,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
       )}
 
       {/* Owner / Assigned to */}
-      <div className="flex items-center gap-1.5 mb-2 ml-5">
+      <div className="flex items-center gap-1.5 mb-2">
         <User size={12} className="text-slate-400 dark:text-neutral-500" />
         <span className={`text-xs ${isCurrentUser(task.owner) ? 'text-indigo-600 dark:text-orange-500 font-medium' : 'text-slate-500 dark:text-neutral-400'}`}>
           {task.owner || 'Unassigned'}
@@ -312,7 +311,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
         )}
       </div>
 
-      <div className="flex items-center justify-between ml-5">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className={`text-xs px-2 py-0.5 rounded-full ${priorityColors[task.priority] || priorityColors['medium']}`}>
             {task.priority}
