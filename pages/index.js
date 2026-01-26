@@ -464,8 +464,8 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
   );
 }
 
-function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, isEmpty }) {
-  const [showDelete, setShowDelete] = useState(false);
+function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, onEdit, isEmpty }) {
+  const [showActions, setShowActions] = useState(false);
 
   return (
     <div
@@ -476,12 +476,12 @@ function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, isEmpt
             ? 'bg-slate-50 dark:bg-neutral-900/50 border-slate-100 dark:border-neutral-800 opacity-60'
             : 'bg-white dark:bg-neutral-900 border-slate-200 dark:border-neutral-800 hover:border-slate-300 dark:hover:border-neutral-600'
       }`}
-      onMouseEnter={() => setShowDelete(true)}
-      onMouseLeave={() => setShowDelete(false)}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
     >
       <button onClick={onClick} className="w-full text-left">
         <div className="flex items-start justify-between gap-2">
-          <h4 className={`font-medium text-sm leading-snug pr-6 ${isEmpty ? 'text-slate-500 dark:text-neutral-400' : 'text-slate-800 dark:text-white'}`}>{meeting.title}</h4>
+          <h4 className={`font-medium text-sm leading-snug pr-12 ${isEmpty ? 'text-slate-500 dark:text-neutral-400' : 'text-slate-800 dark:text-white'}`}>{meeting.title}</h4>
           {taskCount > 0 && (
             <span className="text-xs bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-neutral-400 px-2 py-0.5 rounded-full whitespace-nowrap">
               {taskCount} items
@@ -491,7 +491,7 @@ function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, isEmpt
         <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 dark:text-neutral-400">
           <span className="flex items-center gap-1">
             <Calendar size={12} />
-            {new Date(meeting.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            {new Date(meeting.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </span>
           {meeting.duration && (
             <span className="flex items-center gap-1">
@@ -508,19 +508,147 @@ function MeetingCard({ meeting, taskCount, isSelected, onClick, onDelete, isEmpt
         )}
       </button>
 
-      {/* Delete button */}
-      {showDelete && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(meeting.id, meeting.title);
-          }}
-          className="absolute top-2 right-2 p-1.5 text-slate-400 dark:text-neutral-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"
-          title="Delete meeting and all its tasks"
-        >
-          <Trash2 size={14} />
-        </button>
+      {/* Action buttons */}
+      {showActions && (
+        <div className="absolute top-2 right-2 flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(meeting);
+            }}
+            className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-indigo-500 dark:hover:text-orange-500 hover:bg-indigo-50 dark:hover:bg-orange-900/30 rounded transition-colors"
+            title="Edit meeting details"
+          >
+            <Pencil size={14} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(meeting.id, meeting.title);
+            }}
+            className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors"
+            title="Delete meeting and all its tasks"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       )}
+    </div>
+  );
+}
+
+// Edit Meeting Modal
+function EditMeetingModal({ isOpen, meeting, onClose, onSave }) {
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [participants, setParticipants] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (meeting) {
+      setTitle(meeting.title || '');
+      setDate(meeting.date || '');
+      setParticipants((meeting.participants || []).join(', '));
+    }
+  }, [meeting]);
+
+  if (!isOpen || !meeting) return null;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      const participantsArray = participants
+        .split(',')
+        .map(p => p.trim())
+        .filter(p => p.length > 0);
+
+      await onSave(meeting.id, {
+        title: title.trim(),
+        date,
+        participants: participantsArray
+      });
+      onClose();
+    } catch (error) {
+      console.error('Failed to save meeting:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-md w-full border border-slate-200 dark:border-neutral-600">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-700">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Edit Meeting</h2>
+          <button
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-slate-600 dark:text-neutral-400 dark:hover:text-white"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300 mb-1">
+              Title
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 dark:border-neutral-600 rounded-lg text-slate-800 dark:text-white bg-white dark:bg-neutral-900 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-orange-500 focus:border-transparent"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300 mb-1">
+              Date
+            </label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 dark:border-neutral-600 rounded-lg text-slate-800 dark:text-white bg-white dark:bg-neutral-900 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-orange-500 focus:border-transparent"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300 mb-1">
+              Participants
+            </label>
+            <input
+              type="text"
+              value={participants}
+              onChange={(e) => setParticipants(e.target.value)}
+              placeholder="John, Jane, Bob"
+              className="w-full px-3 py-2 border border-slate-200 dark:border-neutral-600 rounded-lg text-slate-800 dark:text-white bg-white dark:bg-neutral-900 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-orange-500 focus:border-transparent"
+            />
+            <p className="text-xs text-slate-500 dark:text-neutral-400 mt-1">Separate names with commas</p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-700 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 text-sm bg-indigo-600 dark:bg-orange-500 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -2156,6 +2284,7 @@ export default function MeetingKanban() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false });
   const [editingTask, setEditingTask] = useState(null);
+  const [editingMeeting, setEditingMeeting] = useState(null);
   const [addingToColumn, setAddingToColumn] = useState(null);
   const [draggingColumn, setDraggingColumn] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -2718,6 +2847,28 @@ export default function MeetingKanban() {
     });
   };
 
+  const handleUpdateMeeting = async (meetingId, updates) => {
+    // Optimistic update
+    setMeetings(prev => prev.map(m =>
+      m.id === meetingId ? { ...m, ...updates } : m
+    ));
+
+    try {
+      const response = await fetch(`/api/meetings/${meetingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update meeting');
+      }
+    } catch (err) {
+      console.error('Failed to update meeting:', err);
+      fetchData(); // Revert on error
+    }
+  };
+
   const handleArchiveDone = async () => {
     const doneTasks = tasks.filter(t => t.status === 'done' && !t.archived);
     if (doneTasks.length === 0) return;
@@ -3131,6 +3282,7 @@ export default function MeetingKanban() {
                         isSelected={selectedMeeting === meeting.id}
                         onClick={() => setSelectedMeeting(meeting.id === selectedMeeting ? null : meeting.id)}
                         onDelete={handleDeleteMeeting}
+                        onEdit={setEditingMeeting}
                         isEmpty={meeting.taskCount === 0}
                       />
                     ))}
@@ -3401,7 +3553,14 @@ export default function MeetingKanban() {
         onSave={handleEditTask}
         onAddComment={handleAddComment}
       />
-      
+
+      <EditMeetingModal
+        isOpen={!!editingMeeting}
+        meeting={editingMeeting}
+        onClose={() => setEditingMeeting(null)}
+        onSave={handleUpdateMeeting}
+      />
+
       <AddTaskModal
         isOpen={!!addingToColumn}
         columnId={addingToColumn}
