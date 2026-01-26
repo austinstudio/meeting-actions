@@ -175,7 +175,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
       )}
 
       {/* Action buttons - different for trash view */}
-      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-md px-1 py-0.5 shadow-sm">
         {isTrashView ? (
           <>
             <button
@@ -237,14 +237,14 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
 
       {/* Meeting source tag */}
       {meeting && (
-        <div className="mb-2 -mt-1 pr-20">
+        <div className="mb-2 -mt-1">
           <span className="text-xs text-indigo-600 dark:text-orange-500 font-medium truncate block" title={meeting.title}>
             {meeting.title}
           </span>
         </div>
       )}
 
-      <p className={`${density.text} text-slate-800 dark:text-white font-medium leading-snug pr-20 mb-2`}>
+      <p className={`${density.text} text-slate-800 dark:text-white font-medium leading-snug mb-2`}>
         {task.task}
       </p>
 
