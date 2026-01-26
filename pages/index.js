@@ -390,7 +390,7 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={(e) => handleDrop(e, columnTasks.length)}
-      className={`flex-1 min-w-[280px] max-w-[320px] rounded-xl ${colors.bg} dark:bg-opacity-20 border-2 ${isDragOver ? colors.accent : 'border-transparent'} transition-colors ${isDraggingColumn ? 'opacity-50' : ''} flex flex-col h-full`}
+      className={`flex-1 min-w-[280px] max-w-[320px] rounded-xl ${colors.bg} dark:bg-opacity-[0.15] border-2 ${isDragOver ? colors.accent : 'border-transparent'} transition-colors ${isDraggingColumn ? 'opacity-50' : ''} flex flex-col h-full`}
     >
       <div className="p-3 border-b border-slate-200/50 dark:border-neutral-800/50 cursor-grab active:cursor-grabbing">
         <div className="flex items-center justify-between">
