@@ -30,15 +30,15 @@ export default async function handler(req, res) {
     try {
       let allColumns = await kv.get('columns') || [];
 
-      // Get default columns (no userId) and user's custom columns
-      const defaultColumns = DEFAULT_COLUMNS;
+      // Get user's custom columns (with their saved order)
       const userCustomColumns = allColumns.filter(c => c.custom && c.userId === userId);
 
-      // Combine: default columns + user's custom columns
-      let columns = [...defaultColumns, ...userCustomColumns];
+      // Combine default columns with custom columns
+      // Custom columns have their order saved, defaults use their defined order
+      let columns = [...DEFAULT_COLUMNS, ...userCustomColumns];
 
-      // Re-number orders
-      columns = columns.map((c, i) => ({ ...c, order: i }));
+      // Sort by order to respect saved positions
+      columns.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
       return res.status(200).json({ columns });
     } catch (error) {
@@ -82,8 +82,9 @@ export default async function handler(req, res) {
       allColumns.push(newColumn);
       await kv.set('columns', allColumns);
 
-      // Return combined columns for user
-      const columns = [...DEFAULT_COLUMNS, ...userColumns, newColumn].map((c, i) => ({ ...c, order: i }));
+      // Return combined columns for user, sorted by order
+      let columns = [...DEFAULT_COLUMNS, ...userColumns, newColumn];
+      columns.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
       return res.status(200).json({ success: true, column: newColumn, columns });
     } catch (error) {
@@ -106,21 +107,21 @@ export default async function handler(req, res) {
 
       let allColumns = await kv.get('columns') || [];
 
-      // Extract only the user's custom columns from the update
-      // (ignore default columns and other users' columns in the request)
+      // Extract only the user's custom columns from the update (preserving their new order)
       const updatedCustomColumns = updatedColumns.filter(c => c.custom && c.userId === userId);
 
       // Remove user's old custom columns
       allColumns = allColumns.filter(c => !(c.custom && c.userId === userId));
 
-      // Add updated custom columns
+      // Add updated custom columns with their new order values
       allColumns = [...allColumns, ...updatedCustomColumns];
 
       await kv.set('columns', allColumns);
 
-      // Return combined columns for user
+      // Return combined columns for user, sorted by order
       const userCustomColumns = allColumns.filter(c => c.custom && c.userId === userId);
-      const columns = [...DEFAULT_COLUMNS, ...userCustomColumns].map((c, i) => ({ ...c, order: i }));
+      let columns = [...DEFAULT_COLUMNS, ...userCustomColumns];
+      columns.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
       return res.status(200).json({ success: true, columns });
     } catch (error) {
@@ -169,9 +170,10 @@ export default async function handler(req, res) {
       await kv.set('columns', allColumns);
       await kv.set('tasks', tasks);
 
-      // Return combined columns for user
+      // Return combined columns for user, sorted by order
       const userCustomColumns = allColumns.filter(c => c.custom && c.userId === userId);
-      const columns = [...DEFAULT_COLUMNS, ...userCustomColumns].map((c, i) => ({ ...c, order: i }));
+      let columns = [...DEFAULT_COLUMNS, ...userCustomColumns];
+      columns.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
       return res.status(200).json({ success: true, columns });
     } catch (error) {
