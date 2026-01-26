@@ -22,10 +22,20 @@ export const authOptions = {
       // Reject sign-in for non-allowed emails
       return false;
     },
+    async jwt({ token, user, account, profile }) {
+      // On initial sign in, add profile picture to token
+      if (profile) {
+        token.picture = profile.picture;
+      }
+      return token;
+    },
     async session({ session, token }) {
-      // Add user id to session for convenience
+      // Pass user id and picture to session
       if (token?.sub) {
         session.user.id = token.sub;
+      }
+      if (token?.picture) {
+        session.user.image = token.picture;
       }
       return session;
     },
