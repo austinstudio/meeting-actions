@@ -3167,7 +3167,7 @@ export default function MeetingKanban() {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className={`${sidebarCollapsed ? 'w-16' : 'w-80'} border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 min-h-[calc(100vh-73px)] transition-all duration-300 ease-in-out flex flex-col`}>
+        <aside className={`${sidebarCollapsed ? 'w-16' : 'w-80'} border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 h-[calc(100vh-73px)] transition-all duration-300 ease-in-out flex flex-col overflow-hidden`}>
           {/* Collapse Toggle */}
           <div className={`p-2 ${sidebarCollapsed ? 'flex justify-center' : 'flex justify-end'}`}>
             <button
