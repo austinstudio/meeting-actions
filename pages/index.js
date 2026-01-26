@@ -41,11 +41,6 @@ const TAG_COLORS = {
 
 const PREDEFINED_TAGS = ['urgent', 'client', 'bug', 'feature', 'review', 'design'];
 
-const typeIcons = {
-  'action': <CheckCircle2 size={14} />,
-  'follow-up': <ArrowRight size={14} />,
-};
-
 // TagBadge component
 function TagBadge({ tag, onRemove, small = false }) {
   const tagKey = tag.toLowerCase();
@@ -250,18 +245,13 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
         </div>
       )}
 
-      <div className={`flex items-start ${density.gap} mb-2`}>
-        <div className="text-slate-400 dark:text-neutral-500 mt-0.5">
-          {typeIcons[task.type] || typeIcons['action']}
-        </div>
-        <p className={`${density.text} text-slate-800 dark:text-white font-medium leading-snug flex-1 pr-8`}>
-          {task.task}
-        </p>
-      </div>
+      <p className={`${density.text} text-slate-800 dark:text-white font-medium leading-snug pr-8 mb-2`}>
+        {task.task}
+      </p>
 
       {/* Tags */}
       {task.tags && task.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2 ml-5">
+        <div className="flex flex-wrap gap-1 mb-2">
           {task.tags.map(tag => (
             <TagBadge key={tag} tag={tag} small={viewDensity === 'compact'} />
           ))}
@@ -270,7 +260,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
 
       {/* Subtasks progress */}
       {task.subtasks && task.subtasks.length > 0 && (
-        <div className="mb-2 ml-5">
+        <div className="mb-2">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -300,7 +290,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
             e.stopPropagation();
             setExpandContext(!expandContext);
           }}
-          className={`text-xs text-slate-400 dark:text-neutral-500 mb-2 ml-5 mr-1 italic text-left hover:text-slate-500 dark:hover:text-slate-400 break-words ${expandContext ? '' : 'line-clamp-2'}`}
+          className={`text-xs text-slate-400 dark:text-neutral-500 mb-2 mr-1 italic text-left hover:text-slate-500 dark:hover:text-slate-400 break-words ${expandContext ? '' : 'line-clamp-2'}`}
           style={{ maxWidth: 'calc(100% - 1.5rem)' }}
           title={expandContext ? 'Click to collapse' : 'Click to expand'}
         >
