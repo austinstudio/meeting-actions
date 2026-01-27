@@ -2,7 +2,7 @@ import NextAuth from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 
 // Allowlist of emails that can access the app
-const ALLOWED_EMAILS = ['austinstudio@gmail.com', 'frankie4fingars@gmail.com'];
+const ALLOWED_EMAILS = ['austinstudio@gmail.com', 'frankie4fingars@gmail.com', 'renata.miles@gmail.com'];
 
 export const authOptions = {
 	providers: [
