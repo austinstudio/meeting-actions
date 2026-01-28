@@ -93,65 +93,98 @@ function parseDateFromTitle(title) {
   return null;
 }
 
-const EXTRACTION_PROMPT = `You are an expert executive assistant skilled at identifying genuine, actionable commitments from meeting transcripts. Your job is to extract ONLY real action items — not discussion topics, ideas mentioned in passing, or general observations.
+const EXTRACTION_PROMPT = `You are an expert executive assistant skilled at identifying genuine, actionable commitments from various sources. Your job is to extract ONLY real action items — not discussion topics, ideas mentioned in passing, or general observations.
+
+## CONTENT TYPE DETECTION
+First, identify what type of content this is:
+- **Meeting Transcript**: Conversation between multiple people, often with speaker labels
+- **Email**: Has sender/recipient info, subject line, formal structure
+- **Notes**: Personal notes, bullet points, informal jottings
+- **Document**: Formal document, specifications, requirements
+- **Chat/Slack**: Short messages, informal, often threaded
+
+Adapt your extraction based on the content type.
 
 ## CRITICAL: What IS an Action Item
 
 An action item MUST have ALL of these characteristics:
-1. **Explicit commitment**: Someone clearly states they WILL do something (not "should" or "could" or "might")
+1. **Explicit commitment or request**: Someone states they WILL do something, or asks someone to do something
 2. **Specific and actionable**: Can be completed and checked off (not vague like "think about X")
-3. **Has an owner**: Someone took responsibility (stated or clearly implied)
+3. **Has an owner**: Someone took responsibility or was assigned (stated or clearly implied)
 4. **Has a deliverable**: Results in something tangible (email sent, document created, meeting scheduled, decision made)
 
-## Examples of REAL Action Items:
+## Examples by Content Type:
+
+### From Meeting Transcripts:
 - "I'll send you the report by Friday" → Action: Send report, Owner: speaker, Due: Friday
 - "Can you set up a meeting with the design team?" → Action: Schedule design team meeting, Owner: person asked
-- "Let me follow up with Sarah on the budget numbers" → Action: Follow up with Sarah re: budget, Owner: speaker
-- "I need to review the wireframes before dev starts" → Action: Review wireframes, Owner: speaker
-- "We should loop in legal — I'll reach out to them" → Action: Contact legal team, Owner: speaker
+
+### From Emails:
+- "Please review the attached proposal and send feedback by EOD" → Action: Review proposal and send feedback, Owner: Me (recipient), Due: End of day
+- "I'll have the updated designs to you by Tuesday" → Action: (track) Receive updated designs, Owner: Me, Type: follow-up, Person: sender
+- "Can you loop in Sarah on this thread?" → Action: Add Sarah to email thread, Owner: Me
+- "Let's schedule a call next week to discuss" → Action: Schedule call with [sender], Owner: Me
+
+### From Notes:
+- "TODO: Update project timeline" → Action: Update project timeline, Owner: Me
+- "Ask John about API access" → Action: Ask John about API access, Owner: Me, Type: follow-up
+- "Need to book travel for conference" → Action: Book travel for conference, Owner: Me
 
 ## Examples of what is NOT an Action Item (DO NOT EXTRACT):
 - "We should think about redesigning the dashboard" → Just an idea, no commitment
 - "The authentication flow needs work" → Observation, not a commitment
 - "It would be nice to have better reporting" → Wish, not an action
-- "Let's discuss this more next week" → Vague, no specific action
-- "That's a good point about the timeline" → Commentary
-- "We talked about the Q3 roadmap" → Summary of discussion, not action
+- "Thanks for the update" → Pleasantry, not action
+- "Sounds good!" → Acknowledgment, not action
+- "FYI - the meeting was moved to 3pm" → Informational only
 - "The team is concerned about deadlines" → Sentiment, not action
-- "Maybe we could try a different approach" → Speculation
 
 ## Owner Detection Rules:
+
+### For Meeting Transcripts:
 - "I'll..." or "I will..." or "Let me..." → Owner is "Me" (the user)
-- "Can you..." or "Could you..." or "[Name], please..." → Owner is the person being asked
+- "Can you..." or "Could you..." → Owner is the person being asked
+- "[Name] will..." → Owner is that person
+
+### For Emails (assume user is the recipient):
+- Requests directed at "you" → Owner is "Me"
+- Sender commits to doing something → Owner is sender's name, Type: follow-up (you're tracking it)
+- CC'd requests → Owner is the person addressed, or "Me" if unclear
+
+### For Notes:
+- Most items → Owner is "Me" unless explicitly delegated
+
+### General:
 - "We need to..." with no specific person → Owner is "Me" (assume user responsibility)
-- "[Name] will..." or "[Name] is going to..." → Owner is that person
 - If genuinely unclear, mark as "Unassigned"
 
 ## Priority Detection:
-- HIGH: Blocking other work, has urgent deadline (today, tomorrow, ASAP), explicitly marked urgent, client-facing
+- HIGH: Blocking other work, urgent deadline (today, tomorrow, ASAP), explicitly marked urgent/important, client-facing, escalation
 - MEDIUM: Has a deadline within 1-2 weeks, important but not blocking
-- LOW: Nice to have, no specific deadline, internal cleanup tasks
+- LOW: Nice to have, no specific deadline, internal cleanup tasks, FYI items that need action
 
 ## Due Date Rules:
 - Use specific dates mentioned ("by Friday" → calculate actual date)
-- "End of week" → Friday of current week
+- "EOD" or "end of day" → Today's date
+- "End of week" or "EOW" → Friday of current week
 - "Next week" → Following Monday
-- "End of month" → Last day of current month
+- "End of month" or "EOM" → Last day of current month
+- "ASAP" → Tomorrow
 - No date mentioned → Estimate based on urgency (HIGH=2 days, MEDIUM=1 week, LOW=2 weeks)
 - Today's date is: ${new Date().toISOString().split('T')[0]}
 
 ## Follow-up vs Action:
-- FOLLOW-UP: Requires contacting or waiting on a specific person ("check with Sarah", "ping the dev team", "get approval from John")
+- FOLLOW-UP: Requires contacting or waiting on a specific person ("check with Sarah", "waiting for John's response", "need approval from manager")
 - ACTION: Task you can complete independently ("review document", "write proposal", "update spreadsheet")
 
-Analyze the transcript and return ONLY valid JSON in this exact format:
+Analyze the content and return ONLY valid JSON in this exact format:
 
 {
   "meeting": {
-    "title": "Brief, descriptive title (e.g., 'Sprint Planning - Auth Feature' not just 'Meeting')",
+    "title": "Brief, descriptive title based on content (e.g., 'Email: Q1 Budget Review' or 'Sprint Planning - Auth Feature')",
     "participants": ["Name 1", "Name 2"],
-    "summary": "2-3 sentence summary of key decisions and outcomes",
-    "duration": "estimated duration if mentioned, otherwise null"
+    "summary": "2-3 sentence summary of key points and what action is needed",
+    "duration": "estimated duration if mentioned (for meetings), otherwise null"
   },
   "tasks": [
     {
@@ -170,10 +203,11 @@ IMPORTANT GUIDELINES:
 - Quality over quantity: It's better to extract 3 real action items than 10 questionable ones
 - When in doubt, leave it out
 - Every task must pass the "Can this be checked off as DONE?" test
-- Do not extract tasks that are someone else's responsibility unless the user needs to track them
+- For emails: Focus on what YOU (the recipient) need to do, not what others committed to (unless tracking)
 - Combine related micro-tasks into one (e.g., don't split "email John" and "attach the file" — just "Send file to John via email")
+- If content has no actionable items, return an empty tasks array
 
-TRANSCRIPT:
+CONTENT:
 `;
 
 export default async function handler(req, res) {
