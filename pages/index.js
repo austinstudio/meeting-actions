@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ChevronLeft, ListChecks, Rows3, Rows4, LayoutList, GripVertical, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ChevronLeft, ListChecks, Rows3, Rows4, LayoutList, GripVertical, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal } from 'lucide-react';
 
 const DEFAULT_COLUMNS = [
   { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
@@ -585,8 +585,8 @@ function EditMeetingModal({ isOpen, meeting, onClose, onSave }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-md w-full border border-slate-200 dark:border-neutral-600">
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 md:p-4">
+      <div className="bg-white dark:bg-neutral-800 rounded-t-xl md:rounded-xl shadow-xl md:max-w-md w-full border border-slate-200 dark:border-neutral-600">
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-700">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Edit Meeting</h2>
           <button
@@ -665,8 +665,8 @@ function TranscriptModal({ isOpen, meeting, onClose }) {
   if (!isOpen || !meeting) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 md:p-4">
+      <div className="bg-white dark:bg-neutral-900 rounded-t-xl md:rounded-xl shadow-xl w-full md:max-w-3xl h-[90vh] md:h-auto md:max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
           <div>
             <h3 className="font-semibold text-lg text-slate-800 dark:text-white">
@@ -988,8 +988,8 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
   const parsingCount = fileQueue.filter(f => f.status === 'parsing').length;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden relative border border-transparent dark:border-neutral-600">
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 md:p-4">
+      <div className="bg-white dark:bg-neutral-800 rounded-t-xl md:rounded-xl shadow-2xl w-full md:max-w-2xl h-[90vh] md:h-auto md:max-h-[90vh] overflow-hidden relative border border-transparent dark:border-neutral-600 flex flex-col">
         {/* Processing Overlay */}
         {isProcessing && (
           <ProcessingOverlay
@@ -998,7 +998,7 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
           />
         )}
 
-        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800 flex-shrink-0">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white">
             {bulkMode ? `Bulk Import (${parsedCount} files ready)` : 'Add Meeting Transcript'}
           </h2>
@@ -1230,8 +1230,8 @@ function AddColumnModal({ isOpen, onClose, onSubmit }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-md border border-transparent dark:border-neutral-600">
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 md:p-4">
+      <div className="bg-white dark:bg-neutral-800 rounded-t-xl md:rounded-xl shadow-2xl w-full md:max-w-md border border-transparent dark:border-neutral-600">
         <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Add New Column</h2>
           <button onClick={onClose} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-200">
@@ -1296,8 +1296,8 @@ function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmLabe
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden border border-transparent dark:border-neutral-600">
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 md:p-4">
+      <div className="bg-white dark:bg-neutral-800 rounded-t-xl md:rounded-xl shadow-2xl w-full md:max-w-md overflow-hidden border border-transparent dark:border-neutral-600">
         <div className="p-6">
           <div className="flex items-start gap-4">
             {danger && (
@@ -1507,9 +1507,9 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
   const activity = task.activity || [];
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col border border-transparent dark:border-neutral-600">
-        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 md:p-4">
+      <div className="bg-white dark:bg-neutral-800 rounded-t-xl md:rounded-xl shadow-2xl w-full md:max-w-2xl h-[90vh] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col border border-transparent dark:border-neutral-600">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800 flex-shrink-0">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Edit Task</h2>
           <button onClick={onClose} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-200">
             <X size={20} />
@@ -1517,7 +1517,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-200 dark:border-neutral-800 px-4 overflow-x-auto">
+        <div className="flex border-b border-slate-200 dark:border-neutral-800 px-4 overflow-x-auto flex-shrink-0">
           <button
             onClick={() => setActiveTab('details')}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -2053,16 +2053,16 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
   const columnName = columns.find(c => c.id === columnId)?.label || 'To Do';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden border border-transparent dark:border-neutral-600">
-        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 md:p-4">
+      <div className="bg-white dark:bg-neutral-800 rounded-t-xl md:rounded-xl shadow-2xl w-full md:max-w-lg h-[90vh] md:h-auto md:max-h-[90vh] overflow-hidden border border-transparent dark:border-neutral-600 flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800 flex-shrink-0">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Add Task to {columnName}</h2>
           <button onClick={onClose} className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-200">
             <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-140px)]">
+        <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto flex-1">
           {/* Task Description */}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300 mb-1">
@@ -2299,6 +2299,134 @@ function FilterDropdown({ label, icon: Icon, options, value, onChange, multiple 
   );
 }
 
+// MobileFilterSheet component for mobile filter drawer
+function MobileFilterSheet({ isOpen, onClose, view, setView, dueDateFilter, setDueDateFilter, tagFilter, setTagFilter, stats }) {
+  if (!isOpen) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/50 z-50 md:hidden"
+        onClick={onClose}
+      />
+      {/* Sheet */}
+      <div className="fixed inset-x-0 bottom-0 z-50 bg-white dark:bg-neutral-900 rounded-t-2xl shadow-xl md:hidden max-h-[80vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-neutral-800">
+          <h3 className="font-semibold text-slate-800 dark:text-white">Filters</h3>
+          <button onClick={onClose} className="p-1 text-slate-400 dark:text-neutral-500">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-6">
+          {/* View Filter */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-neutral-400 mb-2 uppercase tracking-wide">View</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: 'all', label: 'All Items' },
+                { id: 'mine', label: 'My Tasks', count: stats?.mine },
+                { id: 'actions', label: 'Actions' },
+                { id: 'follow-ups', label: 'Follow-ups' },
+              ].map(option => (
+                <button
+                  key={option.id}
+                  onClick={() => setView(option.id)}
+                  className={`px-3 py-2 rounded-lg text-sm text-left ${
+                    view === option.id
+                      ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium'
+                      : 'bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-neutral-300'
+                  }`}
+                >
+                  {option.label}
+                  {option.count !== undefined && <span className="ml-1 opacity-70">({option.count})</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Due Date Filter */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-neutral-400 mb-2 uppercase tracking-wide">Due Date</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: null, label: 'Any time' },
+                { id: 'overdue', label: 'Overdue' },
+                { id: 'today', label: 'Due Today' },
+                { id: 'this-week', label: 'This Week' },
+                { id: 'upcoming', label: 'Upcoming' },
+              ].map(option => (
+                <button
+                  key={option.id || 'any'}
+                  onClick={() => setDueDateFilter(option.id)}
+                  className={`px-3 py-2 rounded-lg text-sm text-left ${
+                    dueDateFilter === option.id
+                      ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium'
+                      : 'bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-neutral-300'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tags Filter */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-neutral-400 mb-2 uppercase tracking-wide">Tags</label>
+            <div className="flex flex-wrap gap-2">
+              {PREDEFINED_TAGS.map(tag => {
+                const isSelected = tagFilter.includes(tag);
+                const colors = TAG_COLORS[tag] || TAG_COLORS.default;
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => {
+                      if (isSelected) {
+                        setTagFilter(tagFilter.filter(t => t !== tag));
+                      } else {
+                        setTagFilter([...tagFilter, tag]);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-full text-sm ${
+                      isSelected
+                        ? `${colors.bg} ${colors.text} ${colors.border} border`
+                        : 'bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-neutral-300'
+                    }`}
+                  >
+                    #{tag}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Apply/Clear Buttons */}
+        <div className="p-4 border-t border-slate-200 dark:border-neutral-800 flex gap-3">
+          <button
+            onClick={() => {
+              setView('all');
+              setDueDateFilter(null);
+              setTagFilter([]);
+            }}
+            className="flex-1 px-4 py-2.5 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg"
+          >
+            Clear All
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 text-sm bg-indigo-600 dark:bg-orange-500 text-white rounded-lg font-medium"
+          >
+            Apply Filters
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function SearchInput({ value, onChange, resultCount }) {
   const inputRef = useRef(null);
 
@@ -2326,7 +2454,7 @@ function SearchInput({ value, onChange, resultCount }) {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={value ? `${resultCount} results` : "Search tasks... (\u2318K)"}
-        className="pl-9 pr-8 py-1.5 w-64 rounded-lg border border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder-slate-400 dark:placeholder-slate-500"
+        className="pl-9 pr-8 py-1.5 w-full md:w-64 rounded-lg border border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-slate-800 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder-slate-400 dark:placeholder-slate-500"
       />
       {value && (
         <button
@@ -2373,6 +2501,8 @@ export default function MeetingKanban() {
   const [dueDateFilter, setDueDateFilter] = useState(null); // 'overdue', 'today', 'this-week', 'upcoming', null
   const [viewDensity, setViewDensity] = useState('normal'); // 'compact', 'normal', 'spacious'
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Collapsible sidebar
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Mobile sidebar drawer
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false); // Mobile filter sheet
 
   // Initialize theme from localStorage and system preference
   useEffect(() => {
@@ -3121,13 +3251,22 @@ export default function MeetingKanban() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-black transition-colors">
       {/* Header */}
-      <header className="bg-white dark:bg-neutral-950 border-b border-slate-200 dark:border-neutral-800 px-6 py-4">
+      <header className="bg-white dark:bg-neutral-950 border-b border-slate-200 dark:border-neutral-800 px-4 md:px-6 py-3 md:py-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white">Meeting Actions</h1>
-            <p className="text-sm text-slate-500 dark:text-neutral-400 mt-0.5">Extract and track action items from your meetings</p>
+          <div className="flex items-center gap-3">
+            {/* Mobile menu button */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="p-2 text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg md:hidden"
+            >
+              <Menu size={20} />
+            </button>
+            <div>
+              <h1 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white">Meeting Actions</h1>
+              <p className="text-sm text-slate-500 dark:text-neutral-400 mt-0.5 hidden md:block">Extract and track action items from your meetings</p>
+            </div>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 md:gap-6">
             {/* Refresh with last synced */}
             <div className="flex items-center gap-2">
               <button
@@ -3138,17 +3277,18 @@ export default function MeetingKanban() {
                 <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
               </button>
               {lastSynced && (
-                <div className="text-xs text-slate-400 dark:text-neutral-500 hidden sm:block">
+                <div className="text-xs text-slate-400 dark:text-neutral-500 hidden lg:block">
                   <div className="text-[10px] uppercase tracking-wide">Last Updated</div>
                   <div>{lastSynced.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}</div>
                 </div>
               )}
             </div>
 
-            {/* Divider */}
-            <div className="w-px h-10 bg-slate-200 dark:bg-neutral-800" />
+            {/* Divider - hidden on mobile */}
+            <div className="w-px h-10 bg-slate-200 dark:bg-neutral-800 hidden lg:block" />
 
-            <div className="flex items-center gap-4 text-sm">
+            {/* Stats - hidden on mobile, show on lg+ */}
+            <div className="hidden lg:flex items-center gap-4 text-sm">
               <div className="text-center">
                 <div className="text-2xl font-bold text-indigo-600 dark:text-orange-500">{stats.mine}</div>
                 <div className="text-xs text-slate-500 dark:text-neutral-400">My Tasks</div>
@@ -3245,11 +3385,27 @@ export default function MeetingKanban() {
       </header>
 
       <div className="flex pb-5">
-        {/* Sidebar */}
-        <aside className={`${sidebarCollapsed ? 'w-16' : 'w-80'} border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 h-[calc(100vh-93px)] transition-all duration-300 ease-in-out flex flex-col overflow-hidden`}>
+        {/* Mobile sidebar backdrop */}
+        {mobileMenuOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
+
+        {/* Sidebar - drawer on mobile, fixed on desktop */}
+        <aside className={`
+          ${sidebarCollapsed ? 'md:w-16' : 'md:w-80'}
+          fixed md:relative inset-y-0 left-0 z-50 md:z-auto
+          w-80
+          transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
+          border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950
+          h-full md:h-[calc(100vh-93px)]
+          transition-all duration-300 ease-in-out flex flex-col overflow-hidden
+        `}>
           {sidebarCollapsed ? (
             /* Collapsed Sidebar */
-            <div className="flex flex-col items-center gap-2 p-2">
+            <div className="flex flex-col items-center gap-2 p-2 pt-4">
               {/* Expand button */}
               <button
                 onClick={toggleSidebar}
@@ -3311,11 +3467,18 @@ export default function MeetingKanban() {
             /* Expanded Sidebar */
             <div className="flex-1 flex flex-col min-h-0">
               {/* Fixed Header Section */}
-              <div className="px-4 pb-2 flex-shrink-0">
+              <div className="px-4 pt-4 pb-2 flex-shrink-0">
                 <div className="flex items-center gap-2 mb-3">
+                  {/* Mobile close button */}
+                  <button
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors md:hidden"
+                  >
+                    <X size={18} />
+                  </button>
                   <h2 className="font-semibold text-slate-700 dark:text-slate-200">Meetings</h2>
                   <button
-                    onClick={() => setShowPasteModal(true)}
+                    onClick={() => { setShowPasteModal(true); setMobileMenuOpen(false); }}
                     className="flex items-center gap-1 px-2 py-1 text-xs bg-indigo-600 dark:bg-orange-500 text-white rounded-md font-medium hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors"
                     title="Add Meeting Transcript"
                   >
@@ -3325,7 +3488,7 @@ export default function MeetingKanban() {
                   <div className="flex-1" />
                   <button
                     onClick={toggleSidebar}
-                    className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                    className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors hidden md:block"
                     title="Collapse sidebar (⌘B)"
                   >
                     <PanelLeftClose size={18} />
@@ -3333,7 +3496,7 @@ export default function MeetingKanban() {
                 </div>
 
                 <button
-                  onClick={() => setSelectedMeeting(null)}
+                  onClick={() => { setSelectedMeeting(null); setMobileMenuOpen(false); }}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${!selectedMeeting ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
                 >
                   All Meetings ({meetings.length})
@@ -3371,7 +3534,7 @@ export default function MeetingKanban() {
                           meeting={meeting}
                           taskCount={meeting.taskCount}
                           isSelected={selectedMeeting === meeting.id}
-                          onClick={() => setSelectedMeeting(meeting.id === selectedMeeting ? null : meeting.id)}
+                          onClick={() => { setSelectedMeeting(meeting.id === selectedMeeting ? null : meeting.id); setMobileMenuOpen(false); }}
                           onDelete={handleDeleteMeeting}
                           onEdit={setEditingMeeting}
                           onViewTranscript={setViewingTranscript}
@@ -3432,63 +3595,80 @@ export default function MeetingKanban() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 overflow-x-auto h-[calc(100vh-93px)] flex flex-col">
+        <main className="flex-1 p-3 md:p-6 overflow-x-auto h-[calc(100vh-73px)] md:h-[calc(100vh-93px)] flex flex-col">
           {/* Filters - Compact single row with dropdowns */}
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center justify-between gap-2 md:gap-4 mb-4 md:mb-6">
+            <div className="flex items-center gap-2 flex-wrap flex-1">
               <SearchInput
                 value={searchQuery}
                 onChange={setSearchQuery}
                 resultCount={filteredTasks.length}
               />
 
-              <div className="w-px h-6 bg-slate-200 dark:bg-neutral-800" />
+              {/* Mobile filter button */}
+              <button
+                onClick={() => setMobileFiltersOpen(true)}
+                className="flex md:hidden items-center gap-1.5 px-3 py-2 text-sm border border-slate-200 dark:border-neutral-700 rounded-lg text-slate-600 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-neutral-800"
+              >
+                <SlidersHorizontal size={16} />
+                Filters
+                {(tagFilter.length > 0 || dueDateFilter || view !== 'all') && (
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 dark:bg-orange-500 text-white text-xs flex items-center justify-center">
+                    {(tagFilter.length > 0 ? 1 : 0) + (dueDateFilter ? 1 : 0) + (view !== 'all' ? 1 : 0)}
+                  </span>
+                )}
+              </button>
 
-              {/* View Dropdown */}
-              <FilterDropdown
-                label={view === 'all' ? 'View' : view === 'mine' ? 'My Tasks' : view === 'actions' ? 'Actions' : 'Follow-ups'}
-                options={[
-                  { id: 'all', label: 'All Items', count: filteredTasks.length },
-                  { id: 'mine', label: 'My Tasks', count: stats.mine },
-                  { id: 'actions', label: 'Actions' },
-                  { id: 'follow-ups', label: 'Follow-ups' },
-                ]}
-                value={view}
-                onChange={setView}
-              />
+              {/* Desktop filters */}
+              <div className="hidden md:contents">
+                <div className="w-px h-6 bg-slate-200 dark:bg-neutral-800" />
 
-              {/* Due Date Dropdown */}
-              <FilterDropdown
-                label={dueDateFilter ? dueDateFilter === 'overdue' ? 'Overdue' : dueDateFilter === 'today' ? 'Today' : dueDateFilter === 'this-week' ? 'This Week' : 'Upcoming' : 'Due'}
-                icon={Clock}
-                options={[
-                  { id: null, label: 'Any time' },
-                  { id: 'overdue', label: 'Overdue', color: 'text-rose-500' },
-                  { id: 'today', label: 'Due Today', color: 'text-amber-500' },
-                  { id: 'this-week', label: 'This Week', color: 'text-blue-500' },
-                  { id: 'upcoming', label: 'Upcoming' },
-                ]}
-                value={dueDateFilter}
-                onChange={setDueDateFilter}
-              />
+                {/* View Dropdown */}
+                <FilterDropdown
+                  label={view === 'all' ? 'View' : view === 'mine' ? 'My Tasks' : view === 'actions' ? 'Actions' : 'Follow-ups'}
+                  options={[
+                    { id: 'all', label: 'All Items', count: filteredTasks.length },
+                    { id: 'mine', label: 'My Tasks', count: stats.mine },
+                    { id: 'actions', label: 'Actions' },
+                    { id: 'follow-ups', label: 'Follow-ups' },
+                  ]}
+                  value={view}
+                  onChange={setView}
+                />
 
-              {/* Tags Dropdown */}
-              <FilterDropdown
-                label="Tags"
-                icon={Tag}
-                badge={tagFilter.length > 0 ? tagFilter.length : null}
-                options={PREDEFINED_TAGS.map(tag => ({
-                  id: tag,
-                  label: `#${tag}`,
-                }))}
-                value={tagFilter}
-                onChange={setTagFilter}
-                multiple
-              />
+                {/* Due Date Dropdown */}
+                <FilterDropdown
+                  label={dueDateFilter ? dueDateFilter === 'overdue' ? 'Overdue' : dueDateFilter === 'today' ? 'Today' : dueDateFilter === 'this-week' ? 'This Week' : 'Upcoming' : 'Due'}
+                  icon={Clock}
+                  options={[
+                    { id: null, label: 'Any time' },
+                    { id: 'overdue', label: 'Overdue', color: 'text-rose-500' },
+                    { id: 'today', label: 'Due Today', color: 'text-amber-500' },
+                    { id: 'this-week', label: 'This Week', color: 'text-blue-500' },
+                    { id: 'upcoming', label: 'Upcoming' },
+                  ]}
+                  value={dueDateFilter}
+                  onChange={setDueDateFilter}
+                />
 
-              {/* Active Filters as Chips */}
+                {/* Tags Dropdown */}
+                <FilterDropdown
+                  label="Tags"
+                  icon={Tag}
+                  badge={tagFilter.length > 0 ? tagFilter.length : null}
+                  options={PREDEFINED_TAGS.map(tag => ({
+                    id: tag,
+                    label: `#${tag}`,
+                  }))}
+                  value={tagFilter}
+                  onChange={setTagFilter}
+                  multiple
+                />
+              </div>
+
+              {/* Active Filters as Chips - hidden on mobile */}
               {(searchQuery || selectedMeeting || showArchived || tagFilter.length > 0 || dueDateFilter || view !== 'all') && (
-                <>
+                <div className="hidden md:contents">
                   <div className="w-px h-6 bg-slate-200 dark:bg-neutral-800" />
 
                   {searchQuery && (
@@ -3534,13 +3714,13 @@ export default function MeetingKanban() {
                       Clear all
                     </button>
                   )}
-                </>
+                </div>
               )}
             </div>
 
             <button
               onClick={() => setShowColumnModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-neutral-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors whitespace-nowrap"
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-neutral-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors whitespace-nowrap"
             >
               <Plus size={16} />
               Add Column
@@ -3548,9 +3728,9 @@ export default function MeetingKanban() {
           </div>
 
           {/* Kanban Board */}
-          <div className="flex gap-4 flex-1 min-h-0">
+          <div className="flex gap-3 md:gap-4 flex-1 min-h-0 overflow-x-auto snap-x snap-mandatory md:snap-none pb-2 -mx-3 px-3 md:mx-0 md:px-0">
             {columns.sort((a, b) => a.order - b.order).map(column => (
-              <div key={column.id} className="relative group">
+              <div key={column.id} className="relative group snap-start w-[85vw] md:w-auto">
                 <Column
                   column={column}
                   tasks={filteredTasks}
@@ -3645,6 +3825,19 @@ export default function MeetingKanban() {
         columns={columns}
         onClose={() => setAddingToColumn(null)}
         onSave={handleAddTask}
+      />
+
+      {/* Mobile Filter Sheet */}
+      <MobileFilterSheet
+        isOpen={mobileFiltersOpen}
+        onClose={() => setMobileFiltersOpen(false)}
+        view={view}
+        setView={setView}
+        dueDateFilter={dueDateFilter}
+        setDueDateFilter={setDueDateFilter}
+        tagFilter={tagFilter}
+        setTagFilter={setTagFilter}
+        stats={stats}
       />
     </div>
   );
