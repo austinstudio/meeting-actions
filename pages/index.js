@@ -1048,14 +1048,19 @@ function AITaskCard({ task, meeting, onEdit }) {
   );
 }
 
-function AskAIModal({ isOpen, onClose, onEditTask }) {
+function AskAIModal({ isOpen, onClose, onEditTask, tasks: liveTasks, meetings: liveMeetings }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [taskCache, setTaskCache] = useState({}); // Cache of task data by ID
-  const [meetingCache, setMeetingCache] = useState({}); // Cache of meeting data by ID
+  const [referencedTaskIds, setReferencedTaskIds] = useState(new Set()); // Track which tasks AI has referenced
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Build lookup maps from live data
+  const taskMap = {};
+  liveTasks?.forEach(t => { taskMap[t.id] = t; });
+  const meetingMap = {};
+  liveMeetings?.forEach(m => { meetingMap[m.id] = m; });
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -1073,8 +1078,7 @@ function AskAIModal({ isOpen, onClose, onEditTask }) {
   const handleNewChat = () => {
     setMessages([]);
     setInput('');
-    setTaskCache({});
-    setMeetingCache({});
+    setReferencedTaskIds(new Set());
   };
 
   const handleSubmit = async (e) => {
@@ -1099,22 +1103,18 @@ function AskAIModal({ isOpen, onClose, onEditTask }) {
       const data = await response.json();
 
       if (data.success) {
-        // Cache the task and meeting data
+        // Track which task IDs were referenced
         if (data.tasks) {
-          setTaskCache(prev => {
-            const updated = { ...prev };
-            data.tasks.forEach(t => { updated[t.id] = t; });
+          setReferencedTaskIds(prev => {
+            const updated = new Set(prev);
+            data.tasks.forEach(t => updated.add(t.id));
             return updated;
           });
-        }
-        if (data.meetings) {
-          setMeetingCache(prev => ({ ...prev, ...data.meetings }));
         }
 
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: data.response,
-          tasks: data.tasks || []
+          content: data.response
         }]);
       } else {
         setMessages(prev => [...prev, {
@@ -1134,11 +1134,8 @@ function AskAIModal({ isOpen, onClose, onEditTask }) {
   };
 
   // Render formatted AI response with task cards
-  const renderAIResponse = (content, tasks = []) => {
-    // Build a map of task IDs to task objects
-    const taskMap = {};
-    tasks.forEach(t => { taskMap[t.id] = t; });
-
+  // Render formatted AI response with task cards (uses live data from props)
+  const renderAIResponse = (content) => {
     // Split content by task references
     const parts = content.split(/(\[\[TASK:[\w_]+\]\])/g);
 
@@ -1149,13 +1146,13 @@ function AskAIModal({ isOpen, onClose, onEditTask }) {
           const taskMatch = part.match(/\[\[TASK:([\w_]+)\]\]/);
           if (taskMatch) {
             const taskId = taskMatch[1];
-            const task = taskMap[taskId] || taskCache[taskId];
+            const task = taskMap[taskId]; // Use live data from props
             if (task) {
               return (
                 <AITaskCard
                   key={i}
                   task={task}
-                  meeting={meetingCache[task.meetingId]}
+                  meeting={meetingMap[task.meetingId]} // Use live meeting data
                   onEdit={() => {
                     onClose();
                     onEditTask(task);
@@ -1308,7 +1305,7 @@ function AskAIModal({ isOpen, onClose, onEditTask }) {
                     </div>
                   ) : (
                     <div className="max-w-[90%] rounded-2xl px-4 py-3 bg-slate-100 dark:bg-neutral-800 text-slate-800 dark:text-neutral-200">
-                      {renderAIResponse(msg.content, msg.tasks)}
+                      {renderAIResponse(msg.content)}
                     </div>
                   )}
                 </div>
@@ -4582,6 +4579,8 @@ export default function MeetingKanban() {
         isOpen={showAskAI}
         onClose={() => setShowAskAI(false)}
         onEditTask={(task) => setEditingTask(task)}
+        tasks={tasks}
+        meetings={meetings}
       />
     </div>
   );
