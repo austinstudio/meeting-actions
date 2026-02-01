@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ChevronLeft, ListChecks, Rows3, Rows4, LayoutList, GripVertical, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, Smartphone, Gift } from 'lucide-react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ChevronLeft, ListChecks, Rows3, Rows4, LayoutList, GripVertical, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, Smartphone, Gift, Bot } from 'lucide-react';
 import { APP_VERSION, FEATURES, getNewFeatures, getAllFeatures } from '../lib/features';
 
 const DEFAULT_COLUMNS = [
@@ -876,7 +876,8 @@ const FEATURE_ICONS = {
   Smartphone: Smartphone,
   History: History,
   Gift: Gift,
-  Users: Users
+  Users: Users,
+  Bot: Bot
 };
 
 function WhatsNewModal({ isOpen, onClose, features, showAll = false }) {
@@ -976,6 +977,194 @@ function WhatsNewModal({ isOpen, onClose, features, showAll = false }) {
           >
             {showAll ? 'Close' : 'Got it!'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AskAIModal({ isOpen, onClose }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Focus input when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setMessages([]);
+      setInput('');
+    }
+  }, [isOpen]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    const userMessage = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/ask-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userMessage,
+          history: messages
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+      } else {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Sorry, I encountered an error. Please try again.'
+        }]);
+      }
+    } catch (error) {
+      console.error('Ask AI error:', error);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'Sorry, I couldn\'t connect to the AI service. Please try again.'
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const suggestedQuestions = [
+    "What's due this week?",
+    "What should I prioritize today?",
+    "Show me overdue tasks",
+    "Summarize my open items"
+  ];
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 md:p-4">
+      <div className="bg-white dark:bg-neutral-900 rounded-t-xl md:rounded-xl shadow-xl w-full md:max-w-2xl h-[85vh] md:h-[70vh] flex flex-col border border-transparent dark:border-neutral-700">
+        {/* Header */}
+        <div className="flex items-center gap-3 p-4 border-b border-slate-200 dark:border-neutral-800">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 dark:from-orange-500 dark:via-amber-500 dark:to-yellow-500 flex items-center justify-center">
+            <Bot size={20} className="text-white" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-lg text-slate-800 dark:text-white">
+              AI Assistant
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-neutral-400">
+              Ask questions about your tasks and meetings
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-slate-600 dark:text-neutral-400 dark:hover:text-white"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Messages area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center">
+              <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-neutral-800 flex items-center justify-center mb-4">
+                <Bot size={32} className="text-slate-400 dark:text-neutral-500" />
+              </div>
+              <h4 className="text-slate-700 dark:text-neutral-200 font-medium mb-2">
+                How can I help you?
+              </h4>
+              <p className="text-sm text-slate-500 dark:text-neutral-400 mb-6 max-w-sm">
+                I can answer questions about your tasks, help you find things, and suggest what to prioritize.
+              </p>
+              <div className="flex flex-wrap gap-2 justify-center max-w-md">
+                {suggestedQuestions.map((question, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setInput(question);
+                      inputRef.current?.focus();
+                    }}
+                    className="px-3 py-1.5 text-sm bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-neutral-300 rounded-full hover:bg-slate-200 dark:hover:bg-neutral-700 transition-colors"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              {messages.map((msg, i) => (
+                <div
+                  key={i}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
+                      msg.role === 'user'
+                        ? 'bg-indigo-600 dark:bg-orange-500 text-white'
+                        : 'bg-slate-100 dark:bg-neutral-800 text-slate-800 dark:text-neutral-200'
+                    }`}
+                  >
+                    <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
+                  </div>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-slate-100 dark:bg-neutral-800 rounded-2xl px-4 py-3">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 rounded-full bg-slate-400 dark:bg-neutral-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 rounded-full bg-slate-400 dark:bg-neutral-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 rounded-full bg-slate-400 dark:bg-neutral-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </>
+          )}
+        </div>
+
+        {/* Input area */}
+        <div className="p-4 border-t border-slate-200 dark:border-neutral-800">
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask about your tasks..."
+              className="flex-1 px-4 py-2.5 border border-slate-200 dark:border-neutral-700 rounded-xl bg-white dark:bg-neutral-800 text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-orange-500 focus:border-transparent"
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || isLoading}
+              className="px-4 py-2.5 bg-indigo-600 dark:bg-orange-500 text-white rounded-xl hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send size={18} />
+            </button>
+          </form>
         </div>
       </div>
     </div>
@@ -2767,6 +2956,7 @@ export default function MeetingKanban() {
   const [showWhatsNew, setShowWhatsNew] = useState(false); // What's New modal
   const [newFeatures, setNewFeatures] = useState([]); // Features to display in What's New
   const [showAllFeatures, setShowAllFeatures] = useState(false); // Show all features vs just new
+  const [showAskAI, setShowAskAI] = useState(false); // AI Assistant modal
 
   // Initialize theme from localStorage and system preference
   useEffect(() => {
@@ -4056,6 +4246,14 @@ export default function MeetingKanban() {
             </div>
 
             <button
+              onClick={() => setShowAskAI(true)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gradient-to-r from-indigo-500 to-purple-500 dark:from-orange-500 dark:to-amber-500 text-white rounded-lg hover:from-indigo-600 hover:to-purple-600 dark:hover:from-orange-600 dark:hover:to-amber-600 transition-all shadow-sm whitespace-nowrap"
+            >
+              <Bot size={16} />
+              <span className="hidden sm:inline">Ask AI</span>
+            </button>
+
+            <button
               onClick={() => setShowColumnModal(true)}
               className="hidden md:flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 dark:text-neutral-300 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors whitespace-nowrap"
             >
@@ -4193,6 +4391,12 @@ export default function MeetingKanban() {
         onClose={handleWhatsNewDismiss}
         features={newFeatures}
         showAll={showAllFeatures}
+      />
+
+      {/* AI Assistant Modal */}
+      <AskAIModal
+        isOpen={showAskAI}
+        onClose={() => setShowAskAI(false)}
       />
     </div>
   );

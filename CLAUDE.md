@@ -39,7 +39,7 @@ When implementing a new user-facing feature, **always update the What's New moda
 
 ### Available Icons
 
-Currently mapped icons: `Sparkles`, `Smartphone`, `History`, `Gift`, `Users`
+Currently mapped icons: `Sparkles`, `Smartphone`, `History`, `Gift`, `Users`, `Bot`
 
 To add more, update the `FEATURE_ICONS` object in `/pages/index.js`.
 
