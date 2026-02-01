@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
 import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ChevronLeft, ListChecks, Rows3, Rows4, LayoutList, GripVertical, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, Smartphone, Gift } from 'lucide-react';
-import { APP_VERSION, FEATURES, getNewFeatures } from '../lib/features';
+import { APP_VERSION, FEATURES, getNewFeatures, getAllFeatures } from '../lib/features';
 
 const DEFAULT_COLUMNS = [
   { id: 'uncategorized', label: 'Uncategorized', color: 'purple', order: 0 },
@@ -879,10 +879,17 @@ const FEATURE_ICONS = {
   Users: Users
 };
 
-function WhatsNewModal({ isOpen, onClose, features }) {
+function WhatsNewModal({ isOpen, onClose, features, showAll = false }) {
   if (!isOpen || !features || features.length === 0) return null;
 
   const latestVersion = Math.max(...features.map(f => f.version));
+
+  // Format release date
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 md:p-4">
@@ -894,10 +901,10 @@ function WhatsNewModal({ isOpen, onClose, features }) {
           </div>
           <div>
             <h3 className="font-semibold text-lg text-slate-800 dark:text-white">
-              What's New
+              {showAll ? 'Release History' : "What's New"}
             </h3>
             <p className="text-xs text-slate-500 dark:text-neutral-400">
-              Latest updates and features
+              {showAll ? 'All features by version' : 'Latest updates and features'}
             </p>
           </div>
           <button
@@ -910,7 +917,7 @@ function WhatsNewModal({ isOpen, onClose, features }) {
 
         {/* Scrollable feature list */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {features.map((feature, index) => {
+          {features.map((feature) => {
             const IconComponent = FEATURE_ICONS[feature.icon] || Gift;
             const isLatest = feature.version === latestVersion;
 
@@ -933,11 +940,14 @@ function WhatsNewModal({ isOpen, onClose, features }) {
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h4 className="font-medium text-slate-800 dark:text-white text-sm">
                       {feature.title}
                     </h4>
-                    {isLatest && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-200 dark:bg-neutral-700 text-slate-600 dark:text-neutral-300 rounded">
+                      v{feature.version}
+                    </span>
+                    {isLatest && !showAll && (
                       <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded">
                         New
                       </span>
@@ -946,6 +956,12 @@ function WhatsNewModal({ isOpen, onClose, features }) {
                   <p className="text-sm text-slate-500 dark:text-neutral-400 mt-1">
                     {feature.description}
                   </p>
+                  {showAll && feature.releaseDate && (
+                    <p className="text-xs text-slate-400 dark:text-neutral-500 mt-2 flex items-center gap-1">
+                      <Calendar size={10} />
+                      {formatDate(feature.releaseDate)}
+                    </p>
+                  )}
                 </div>
               </div>
             );
@@ -958,7 +974,7 @@ function WhatsNewModal({ isOpen, onClose, features }) {
             onClick={onClose}
             className="px-6 py-2 text-sm bg-indigo-600 dark:bg-orange-500 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-orange-600 transition-colors font-medium"
           >
-            Got it!
+            {showAll ? 'Close' : 'Got it!'}
           </button>
         </div>
       </div>
@@ -2750,6 +2766,7 @@ export default function MeetingKanban() {
   const [showImportHistory, setShowImportHistory] = useState(false); // Import history modal
   const [showWhatsNew, setShowWhatsNew] = useState(false); // What's New modal
   const [newFeatures, setNewFeatures] = useState([]); // Features to display in What's New
+  const [showAllFeatures, setShowAllFeatures] = useState(false); // Show all features vs just new
 
   // Initialize theme from localStorage and system preference
   useEffect(() => {
@@ -2926,16 +2943,27 @@ export default function MeetingKanban() {
   // Handle What's New modal dismiss
   const handleWhatsNewDismiss = async () => {
     setShowWhatsNew(false);
+    setShowAllFeatures(false);
 
-    try {
-      await fetch('/api/user-preferences', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lastSeenVersion: APP_VERSION })
-      });
-    } catch (err) {
-      console.error('Failed to update last seen version:', err);
+    // Only update lastSeenVersion if we were showing new features (not release history)
+    if (!showAllFeatures) {
+      try {
+        await fetch('/api/user-preferences', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lastSeenVersion: APP_VERSION })
+        });
+      } catch (err) {
+        console.error('Failed to update last seen version:', err);
+      }
     }
+  };
+
+  // Open release history modal
+  const handleShowReleaseHistory = () => {
+    setNewFeatures(getAllFeatures());
+    setShowAllFeatures(true);
+    setShowWhatsNew(true);
   };
 
   // Process a pasted transcript
@@ -3654,6 +3682,15 @@ export default function MeetingKanban() {
                     </div>
                   </div>
 
+                  {/* What's New Link */}
+                  <button
+                    onClick={handleShowReleaseHistory}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-neutral-800 border-b border-slate-200 dark:border-neutral-800"
+                  >
+                    <Gift size={16} />
+                    What's New
+                  </button>
+
                   <button
                     onClick={() => signOut({ callbackUrl: '/login' })}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-neutral-800 rounded-b-lg"
@@ -4155,6 +4192,7 @@ export default function MeetingKanban() {
         isOpen={showWhatsNew}
         onClose={handleWhatsNewDismiss}
         features={newFeatures}
+        showAll={showAllFeatures}
       />
     </div>
   );

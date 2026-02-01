@@ -17,7 +17,8 @@ When implementing a new user-facing feature, **always update the What's New moda
      version: 4,  // Match the new APP_VERSION
      title: 'Feature Name',  // Short, clear title
      description: 'What it does and why users will find it useful.',
-     icon: 'IconName'  // See available icons below
+     icon: 'IconName',  // See available icons below
+     releaseDate: '2026-02-01'  // Today's date in YYYY-MM-DD format
    }
    ```
 
@@ -27,7 +28,7 @@ When implementing a new user-facing feature, **always update the What's New moda
 
 ### Available Icons
 
-Currently mapped icons: `Sparkles`, `Smartphone`, `History`, `Gift`
+Currently mapped icons: `Sparkles`, `Smartphone`, `History`, `Gift`, `Users`
 
 To add more, update the `FEATURE_ICONS` object in `/pages/index.js`.
 
