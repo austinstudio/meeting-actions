@@ -983,10 +983,77 @@ function WhatsNewModal({ isOpen, onClose, features, showAll = false }) {
   );
 }
 
-function AskAIModal({ isOpen, onClose }) {
+// Compact task card for AI responses
+function AITaskCard({ task, meeting, onEdit }) {
+  const priorityColors = {
+    high: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400',
+    medium: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400',
+    low: 'bg-slate-100 text-slate-600 dark:bg-neutral-700 dark:text-neutral-400',
+  };
+
+  const statusColors = {
+    'uncategorized': 'border-purple-300 dark:border-purple-500/50',
+    'todo': 'border-slate-300 dark:border-slate-600',
+    'in-progress': 'border-blue-300 dark:border-blue-500/50',
+    'waiting': 'border-amber-300 dark:border-amber-500/50',
+    'done': 'border-emerald-300 dark:border-emerald-500/50',
+  };
+
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dateOnly = new Date(date);
+    dateOnly.setHours(0, 0, 0, 0);
+
+    if (dateOnly < today && task.status !== 'done') return { text: 'Overdue', className: 'text-rose-600 dark:text-rose-400 font-medium' };
+    if (dateOnly.getTime() === today.getTime()) return { text: 'Today', className: 'text-amber-600 dark:text-amber-400 font-medium' };
+    if (dateOnly.getTime() === tomorrow.getTime()) return { text: 'Tomorrow', className: 'text-blue-600 dark:text-blue-400' };
+    return { text: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), className: 'text-slate-500 dark:text-neutral-400' };
+  };
+
+  const dueDateInfo = formatDate(task.dueDate);
+
+  return (
+    <button
+      onClick={onEdit}
+      className={`w-full text-left p-3 rounded-lg bg-white dark:bg-neutral-900 border-l-4 ${statusColors[task.status] || statusColors['uncategorized']} border border-slate-200 dark:border-neutral-700 hover:border-slate-300 dark:hover:border-neutral-600 transition-colors group`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-medium text-slate-800 dark:text-white leading-snug flex-1 group-hover:text-indigo-600 dark:group-hover:text-orange-500 transition-colors">
+          {task.task}
+        </p>
+        <ChevronRight size={14} className="text-slate-300 dark:text-neutral-600 group-hover:text-indigo-500 dark:group-hover:text-orange-500 flex-shrink-0 mt-0.5" />
+      </div>
+      <div className="flex items-center gap-2 mt-2 flex-wrap">
+        <span className={`text-xs px-1.5 py-0.5 rounded ${priorityColors[task.priority] || priorityColors['medium']}`}>
+          {task.priority}
+        </span>
+        <span className="text-xs text-slate-500 dark:text-neutral-400">
+          {task.owner}
+        </span>
+        <span className={`text-xs flex items-center gap-1 ${dueDateInfo.className}`}>
+          <Clock size={10} />
+          {dueDateInfo.text}
+        </span>
+      </div>
+      {meeting && (
+        <p className="text-xs text-slate-400 dark:text-neutral-500 mt-1.5 truncate">
+          From: {meeting.title}
+        </p>
+      )}
+    </button>
+  );
+}
+
+function AskAIModal({ isOpen, onClose, onEditTask }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [taskCache, setTaskCache] = useState({}); // Cache of task data by ID
+  const [meetingCache, setMeetingCache] = useState({}); // Cache of meeting data by ID
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -1007,6 +1074,8 @@ function AskAIModal({ isOpen, onClose }) {
     if (!isOpen) {
       setMessages([]);
       setInput('');
+      setTaskCache({});
+      setMeetingCache({});
     }
   }, [isOpen]);
 
@@ -1025,14 +1094,30 @@ function AskAIModal({ isOpen, onClose }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: userMessage,
-          history: messages
+          history: messages.filter(m => !m.tasks) // Don't send task data in history
         })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+        // Cache the task and meeting data
+        if (data.tasks) {
+          setTaskCache(prev => {
+            const updated = { ...prev };
+            data.tasks.forEach(t => { updated[t.id] = t; });
+            return updated;
+          });
+        }
+        if (data.meetings) {
+          setMeetingCache(prev => ({ ...prev, ...data.meetings }));
+        }
+
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: data.response,
+          tasks: data.tasks || []
+        }]);
       } else {
         setMessages(prev => [...prev, {
           role: 'assistant',
@@ -1048,6 +1133,97 @@ function AskAIModal({ isOpen, onClose }) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Render formatted AI response with task cards
+  const renderAIResponse = (content, tasks = []) => {
+    // Build a map of task IDs to task objects
+    const taskMap = {};
+    tasks.forEach(t => { taskMap[t.id] = t; });
+
+    // Split content by task references
+    const parts = content.split(/(\[\[TASK:[\w_]+\]\])/g);
+
+    return (
+      <div className="space-y-2">
+        {parts.map((part, i) => {
+          // Check if this is a task reference
+          const taskMatch = part.match(/\[\[TASK:([\w_]+)\]\]/);
+          if (taskMatch) {
+            const taskId = taskMatch[1];
+            const task = taskMap[taskId] || taskCache[taskId];
+            if (task) {
+              return (
+                <AITaskCard
+                  key={i}
+                  task={task}
+                  meeting={meetingCache[task.meetingId]}
+                  onEdit={() => {
+                    onClose();
+                    onEditTask(task);
+                  }}
+                />
+              );
+            }
+            return null; // Task not found, skip
+          }
+
+          // Regular text - apply formatting
+          if (!part.trim()) return null;
+
+          return (
+            <div key={i} className="text-sm">
+              {formatAIText(part)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Format text with basic markdown-like styling
+  const formatAIText = (text) => {
+    // Split into lines for processing
+    const lines = text.split('\n');
+
+    return lines.map((line, i) => {
+      if (!line.trim()) return <br key={i} />;
+
+      // Process inline formatting
+      let formatted = line;
+
+      // Bold: **text**
+      const parts = [];
+      let lastIndex = 0;
+      const boldRegex = /\*\*([^*]+)\*\*/g;
+      let match;
+
+      while ((match = boldRegex.exec(formatted)) !== null) {
+        if (match.index > lastIndex) {
+          parts.push(formatted.slice(lastIndex, match.index));
+        }
+        parts.push(<strong key={`bold-${i}-${match.index}`} className="font-semibold">{match[1]}</strong>);
+        lastIndex = match.index + match[0].length;
+      }
+      if (lastIndex < formatted.length) {
+        parts.push(formatted.slice(lastIndex));
+      }
+
+      const content = parts.length > 0 ? parts : formatted;
+
+      // Check if line is a bullet point
+      if (line.trim().startsWith('• ') || line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+        const bulletContent = line.trim().replace(/^[•\-*]\s*/, '');
+        return (
+          <div key={i} className="flex gap-2 ml-1">
+            <span className="text-indigo-500 dark:text-orange-500">•</span>
+            <span>{typeof content === 'string' ? bulletContent : content}</span>
+          </div>
+        );
+      }
+
+      return <p key={i} className="leading-relaxed">{content}</p>;
+    });
   };
 
   const suggestedQuestions = [
@@ -1118,15 +1294,15 @@ function AskAIModal({ isOpen, onClose }) {
                   key={i}
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
-                      msg.role === 'user'
-                        ? 'bg-indigo-600 dark:bg-orange-500 text-white'
-                        : 'bg-slate-100 dark:bg-neutral-800 text-slate-800 dark:text-neutral-200'
-                    }`}
-                  >
-                    <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
-                  </div>
+                  {msg.role === 'user' ? (
+                    <div className="max-w-[85%] rounded-2xl px-4 py-2.5 bg-indigo-600 dark:bg-orange-500 text-white">
+                      <div className="text-sm">{msg.content}</div>
+                    </div>
+                  ) : (
+                    <div className="max-w-[90%] rounded-2xl px-4 py-3 bg-slate-100 dark:bg-neutral-800 text-slate-800 dark:text-neutral-200">
+                      {renderAIResponse(msg.content, msg.tasks)}
+                    </div>
+                  )}
                 </div>
               ))}
               {isLoading && (
@@ -4397,6 +4573,7 @@ export default function MeetingKanban() {
       <AskAIModal
         isOpen={showAskAI}
         onClose={() => setShowAskAI(false)}
+        onEditTask={(task) => setEditingTask(task)}
       />
     </div>
   );

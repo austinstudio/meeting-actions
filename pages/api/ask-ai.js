@@ -40,7 +40,7 @@ function buildContext(tasks, meetings) {
     return due > today && due <= weekFromNow && t.status !== 'done';
   });
 
-  // Build context string
+  // Build context string with task IDs for referencing
   let context = `TODAY'S DATE: ${today.toISOString().split('T')[0]}\n\n`;
 
   context += `TASK SUMMARY:\n`;
@@ -53,28 +53,29 @@ function buildContext(tasks, meetings) {
   context += `TASKS BY STATUS:\n`;
   for (const [status, statusTasks] of Object.entries(tasksByStatus)) {
     context += `\n[${status.toUpperCase()}] (${statusTasks.length} tasks):\n`;
-    statusTasks.slice(0, 20).forEach(t => {
+    statusTasks.slice(0, 30).forEach(t => {
       const meeting = meetings.find(m => m.id === t.meetingId);
-      context += `- "${t.task}" | Owner: ${t.owner} | Due: ${t.dueDate} | Priority: ${t.priority}`;
+      // Include task ID for referencing
+      context += `- [ID:${t.id}] "${t.task}" | Owner: ${t.owner} | Due: ${t.dueDate} | Priority: ${t.priority} | Status: ${t.status}`;
       if (t.type === 'follow-up' && t.person) context += ` | Follow-up with: ${t.person}`;
       if (meeting) context += ` | From: ${meeting.title}`;
       if (t.tags?.length) context += ` | Tags: ${t.tags.join(', ')}`;
       context += `\n`;
     });
-    if (statusTasks.length > 20) {
-      context += `  ... and ${statusTasks.length - 20} more\n`;
+    if (statusTasks.length > 30) {
+      context += `  ... and ${statusTasks.length - 30} more\n`;
     }
   }
 
   context += `\nRECENT MEETINGS (${meetings.length} total):\n`;
   meetings.slice(0, 10).forEach(m => {
     const meetingTasks = activeTasks.filter(t => t.meetingId === m.id);
-    context += `- "${m.title}" (${m.date}) - ${meetingTasks.length} tasks`;
+    context += `- [ID:${m.id}] "${m.title}" (${m.date}) - ${meetingTasks.length} tasks`;
     if (m.participants?.length) context += ` | Participants: ${m.participants.join(', ')}`;
     context += `\n`;
   });
 
-  return context;
+  return { context, tasks: activeTasks, meetings };
 }
 
 const SYSTEM_PROMPT = `You are a helpful AI assistant for a task management application called "Meeting Actions". Users import meeting transcripts and you help them extract and manage action items.
@@ -88,15 +89,36 @@ Your capabilities:
 - Offer prioritization suggestions
 - Analyze workload and deadlines
 
-Guidelines:
-- Be concise but helpful - this is a productivity tool
-- Use bullet points and clear formatting when listing things
-- If asked about something not in the data, say so clearly
-- Reference specific task names and dates when relevant
-- When suggesting priorities, consider due dates, priority levels, and overdue status
-- Format dates in a human-friendly way (e.g., "tomorrow", "next Monday", "Jan 15")
+IMPORTANT FORMATTING RULES:
+1. When listing tasks, use this EXACT format for each task (one per line):
+   [[TASK:task_id_here]]
 
-You cannot modify tasks directly (yet), but you can suggest what actions the user should take.
+   The task_id is provided in the context as [ID:xxx]. Extract just the ID part.
+   Example: If context shows [ID:t_1706789123_0], write [[TASK:t_1706789123_0]]
+
+2. For general text formatting:
+   - Use **bold** for emphasis
+   - Use bullet points with "• " (bullet character) for lists that aren't tasks
+   - Keep paragraphs short and scannable
+   - Use line breaks between sections
+
+3. Structure your responses clearly:
+   - Start with a brief summary or direct answer
+   - Then list relevant tasks using the [[TASK:id]] format
+   - End with any suggestions or next steps if appropriate
+
+4. Date formatting: Use human-friendly formats like "tomorrow", "Monday", "Jan 15"
+
+5. Do NOT include task details in your text - just use [[TASK:id]] and the UI will render the full task card
+
+Example response format:
+You have 3 tasks due this week:
+
+[[TASK:t_123_0]]
+[[TASK:t_123_1]]
+[[TASK:t_123_2]]
+
+I'd suggest prioritizing the first one since it's **high priority** and due tomorrow.
 
 Current user context:
 `;
@@ -128,11 +150,11 @@ export default async function handler(req, res) {
     const allTasks = await kv.get('tasks') || [];
     const allMeetings = await kv.get('meetings') || [];
 
-    const tasks = allTasks.filter(t => t.userId === userId);
-    const meetings = allMeetings.filter(m => m.userId === userId);
+    const userTasks = allTasks.filter(t => t.userId === userId);
+    const userMeetings = allMeetings.filter(m => m.userId === userId);
 
     // Build context
-    const context = buildContext(tasks, meetings);
+    const { context, tasks, meetings } = buildContext(userTasks, userMeetings);
 
     // Initialize the model
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
@@ -163,9 +185,29 @@ export default async function handler(req, res) {
     const response = await result.response;
     const text = response.text();
 
+    // Extract referenced task IDs from response
+    const taskIdMatches = text.match(/\[\[TASK:([\w_]+)\]\]/g) || [];
+    const referencedTaskIds = taskIdMatches.map(m => m.match(/\[\[TASK:([\w_]+)\]\]/)[1]);
+
+    // Get the full task objects for referenced tasks
+    const referencedTasks = tasks.filter(t => referencedTaskIds.includes(t.id));
+
+    // Also include meeting info for those tasks
+    const taskMeetings = {};
+    referencedTasks.forEach(t => {
+      if (t.meetingId) {
+        const meeting = meetings.find(m => m.id === t.meetingId);
+        if (meeting) {
+          taskMeetings[t.meetingId] = { id: meeting.id, title: meeting.title };
+        }
+      }
+    });
+
     return res.status(200).json({
       success: true,
-      response: text
+      response: text,
+      tasks: referencedTasks,
+      meetings: taskMeetings
     });
 
   } catch (error) {
