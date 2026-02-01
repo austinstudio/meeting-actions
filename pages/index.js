@@ -1069,15 +1069,13 @@ function AskAIModal({ isOpen, onClose, onEditTask }) {
     }
   }, [isOpen]);
 
-  // Reset state when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setMessages([]);
-      setInput('');
-      setTaskCache({});
-      setMeetingCache({});
-    }
-  }, [isOpen]);
+  // Function to manually start a new chat
+  const handleNewChat = () => {
+    setMessages([]);
+    setInput('');
+    setTaskCache({});
+    setMeetingCache({});
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1251,12 +1249,22 @@ function AskAIModal({ isOpen, onClose, onEditTask }) {
               Ask questions about your tasks and meetings
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-600 dark:text-neutral-400 dark:hover:text-white"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-1">
+            {messages.length > 0 && (
+              <button
+                onClick={handleNewChat}
+                className="px-2 py-1 text-xs text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-200 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded transition-colors"
+              >
+                New Chat
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:text-neutral-400 dark:hover:text-white"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Messages area */}
