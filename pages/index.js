@@ -875,7 +875,8 @@ const FEATURE_ICONS = {
   Sparkles: Sparkles,
   Smartphone: Smartphone,
   History: History,
-  Gift: Gift
+  Gift: Gift,
+  Users: Users
 };
 
 function WhatsNewModal({ isOpen, onClose, features }) {
