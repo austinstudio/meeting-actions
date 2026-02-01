@@ -2056,6 +2056,13 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
     onClose();
   };
 
+  const handleMarkAsDone = async () => {
+    setIsSaving(true);
+    await onSave(task.id, { ...formData, status: 'done' });
+    setIsSaving(false);
+    onClose();
+  };
+
   const handleAddComment = async () => {
     if (!newComment.trim() || isAddingComment) return;
 
@@ -2229,7 +2236,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
         <div className="flex-1 overflow-y-auto">
           {/* Details Tab */}
           {activeTab === 'details' && (
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            <form id="edit-task-form" onSubmit={handleSubmit} className="p-4 space-y-4">
               {/* Task Description */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300 mb-1">
@@ -2349,28 +2356,44 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
               </div>
 
               {/* Buttons */}
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-slate-600 dark:text-neutral-300 hover:text-slate-800 dark:hover:text-slate-100 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!formData.task.trim() || isSaving}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {isSaving ? (
-                    <>
-                      <RefreshCw size={16} className="animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Save Changes'
-                  )}
-                </button>
+              <div className="flex justify-between pt-2">
+                {/* Mark as Done button - only show if not already done */}
+                {formData.status !== 'done' ? (
+                  <button
+                    type="button"
+                    disabled={!formData.task.trim() || isSaving}
+                    onClick={handleMarkAsDone}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <CheckCircle2 size={16} />
+                    Mark as Done
+                  </button>
+                ) : (
+                  <div />
+                )}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 text-slate-600 dark:text-neutral-300 hover:text-slate-800 dark:hover:text-slate-100 font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!formData.task.trim() || isSaving}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isSaving ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Changes'
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           )}
