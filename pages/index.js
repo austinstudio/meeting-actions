@@ -1988,9 +1988,15 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
   const [isAddingComment, setIsAddingComment] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [newSubtask, setNewSubtask] = useState('');
+  const [editingSubtaskId, setEditingSubtaskId] = useState(null);
+  const [editingSubtaskText, setEditingSubtaskText] = useState('');
+  const [currentTaskId, setCurrentTaskId] = useState(null);
 
   useEffect(() => {
     if (task && isOpen) {
+      // Only reset tab and clear inputs when opening a different task
+      const isNewTask = task.id !== currentTaskId;
+
       setFormData({
         task: task.task || '',
         owner: task.owner || '',
@@ -2003,12 +2009,23 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
         tags: task.tags || [],
         subtasks: task.subtasks || []
       });
-      setActiveTab('details');
-      setNewComment('');
-      setNewTag('');
-      setNewSubtask('');
+
+      if (isNewTask) {
+        setActiveTab('details');
+        setNewComment('');
+        setNewTag('');
+        setNewSubtask('');
+        setCurrentTaskId(task.id);
+      }
     }
   }, [task, isOpen]);
+
+  // Reset currentTaskId when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setCurrentTaskId(null);
+    }
+  }, [isOpen]);
 
   // Tag management
   const addTag = (tag) => {
@@ -2023,29 +2040,53 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
     setFormData({ ...formData, tags: formData.tags.filter(t => t !== tagToRemove) });
   };
 
-  // Subtask management
-  const addSubtask = () => {
+  // Subtask management - with immediate save
+  const saveSubtasksUpdate = async (updatedSubtasks) => {
+    const updatedFormData = { ...formData, subtasks: updatedSubtasks };
+    setFormData(updatedFormData);
+    await onSave(task.id, updatedFormData);
+  };
+
+  const addSubtask = async () => {
     if (!newSubtask.trim()) return;
     const subtask = {
       id: `st_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       text: newSubtask.trim(),
       completed: false
     };
-    setFormData({ ...formData, subtasks: [...formData.subtasks, subtask] });
     setNewSubtask('');
+    await saveSubtasksUpdate([...formData.subtasks, subtask]);
   };
 
-  const toggleSubtask = (subtaskId) => {
-    setFormData({
-      ...formData,
-      subtasks: formData.subtasks.map(st =>
-        st.id === subtaskId ? { ...st, completed: !st.completed } : st
-      )
-    });
+  const toggleSubtask = async (subtaskId) => {
+    const updatedSubtasks = formData.subtasks.map(st =>
+      st.id === subtaskId ? { ...st, completed: !st.completed } : st
+    );
+    await saveSubtasksUpdate(updatedSubtasks);
   };
 
-  const removeSubtask = (subtaskId) => {
-    setFormData({ ...formData, subtasks: formData.subtasks.filter(st => st.id !== subtaskId) });
+  const removeSubtask = async (subtaskId) => {
+    await saveSubtasksUpdate(formData.subtasks.filter(st => st.id !== subtaskId));
+  };
+
+  const startEditingSubtask = (subtask) => {
+    setEditingSubtaskId(subtask.id);
+    setEditingSubtaskText(subtask.text);
+  };
+
+  const saveSubtaskEdit = async () => {
+    if (!editingSubtaskId) return;
+    if (!editingSubtaskText.trim()) {
+      // If empty, remove the subtask
+      await removeSubtask(editingSubtaskId);
+    } else {
+      const updatedSubtasks = formData.subtasks.map(st =>
+        st.id === editingSubtaskId ? { ...st, text: editingSubtaskText.trim() } : st
+      );
+      await saveSubtasksUpdate(updatedSubtasks);
+    }
+    setEditingSubtaskId(null);
+    setEditingSubtaskText('');
   };
 
   const handleSubmit = async (e) => {
@@ -2542,9 +2583,32 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                         >
                           {subtask.completed && <CheckCircle2 size={12} />}
                         </button>
-                        <span className={`flex-1 text-sm ${subtask.completed ? 'text-slate-400 dark:text-neutral-500 line-through' : 'text-slate-700 dark:text-neutral-300'}`}>
-                          {subtask.text}
-                        </span>
+                        {editingSubtaskId === subtask.id ? (
+                          <input
+                            type="text"
+                            value={editingSubtaskText}
+                            onChange={(e) => setEditingSubtaskText(e.target.value)}
+                            onBlur={saveSubtaskEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                saveSubtaskEdit();
+                              } else if (e.key === 'Escape') {
+                                setEditingSubtaskId(null);
+                                setEditingSubtaskText('');
+                              }
+                            }}
+                            autoFocus
+                            className="flex-1 text-sm px-2 py-1 border border-indigo-300 dark:border-indigo-600 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-neutral-900 dark:text-white"
+                          />
+                        ) : (
+                          <span
+                            onClick={() => startEditingSubtask(subtask)}
+                            className={`flex-1 text-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-neutral-800 px-2 py-1 rounded ${subtask.completed ? 'text-slate-400 dark:text-neutral-500 line-through' : 'text-slate-700 dark:text-neutral-300'}`}
+                          >
+                            {subtask.text}
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => removeSubtask(subtask.id)}
