@@ -166,11 +166,11 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
       draggable={!isTrashView}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className={`rounded-lg border border-slate-200 dark:border-neutral-800 ${density.padding} ${isTrashView ? 'cursor-default opacity-75' : 'cursor-grab active:cursor-grabbing'} shadow-sm hover:shadow-md transition-all relative group/card ${isDragging ? 'opacity-50 rotate-2' : ''} ${task.pinned ? 'bg-blue-50 dark:bg-[rgb(0_20_51/77%)]' : 'bg-white dark:bg-neutral-900'}`}
+      className={`rounded-lg border border-slate-200 dark:border-neutral-800 ${density.padding} ${isTrashView ? 'cursor-default opacity-75' : 'cursor-grab active:cursor-grabbing'} shadow-sm hover:shadow-md transition-all relative group/card ${isDragging ? 'opacity-50 rotate-2' : ''} ${task.pinned ? 'bg-orange-50 dark:bg-[rgb(51_20_0/77%)]' : 'bg-white dark:bg-neutral-900'}`}
     >
       {/* Pin indicator */}
       {task.pinned && (
-        <div className="absolute -top-2 -left-2 w-5 h-5 bg-blue-400 dark:bg-blue-500 rounded-full flex items-center justify-center shadow-sm">
+        <div className="absolute -top-2 -left-2 w-5 h-5 bg-orange-400 dark:bg-orange-500 rounded-full flex items-center justify-center shadow-sm">
           <Pin size={10} className="text-white transform rotate-45" />
         </div>
       )}
@@ -207,7 +207,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
                 e.stopPropagation();
                 onPin(task.id, !task.pinned);
               }}
-              className={`p-1 ${task.pinned ? 'text-blue-500' : 'text-slate-300 dark:text-neutral-600 hover:text-blue-500'}`}
+              className={`p-1 ${task.pinned ? 'text-orange-500' : 'text-slate-300 dark:text-neutral-600 hover:text-orange-500'}`}
               title={task.pinned ? 'Unpin task' : 'Pin task'}
             >
               <Pin size={14} className={task.pinned ? 'transform rotate-45' : ''} />
