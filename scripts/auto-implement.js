@@ -85,6 +85,7 @@ async function main() {
   // Determine issue type from labels
   const isEnhancement = issueLabels.includes('enhancement');
   const isBug = issueLabels.includes('bug');
+  const allowDeps = issueLabels.includes('allow-deps');
 
   // Get project structure
   const allFiles = getJsFiles(process.cwd());
@@ -149,7 +150,7 @@ Your task is to implement changes based on GitHub issues.
 
 1. **ALWAYS EDIT EXISTING FILES** - Do NOT create new files unless absolutely necessary. The codebase already has established patterns. Find where similar code exists and modify it there.
 
-2. **NEVER MODIFY package.json** - Do not add dependencies. Work with what's already installed.
+2. **AVOID MODIFYING package.json** - Only add dependencies if absolutely necessary AND the issue has the "allow-deps" label. Otherwise, work with what's already installed.
 
 3. **FIND THE RIGHT LOCATION** - Before making changes, analyze where similar functionality exists in the codebase. For UI changes, look in pages/index.js which contains most components.
 
@@ -218,7 +219,7 @@ ${fileContext}
 IMPORTANT REMINDERS:
 - The user menu with GitHub icon is in pages/index.js - search for "Github" or "githubStatus" to find it
 - DO NOT create new component files - edit pages/index.js directly
-- DO NOT modify package.json
+- ${allowDeps ? 'New dependencies ARE allowed for this issue (allow-deps label present)' : 'DO NOT modify package.json - no new dependencies allowed'}
 - Use the \`title\` attribute for simple tooltips
 
 Please implement the requested change by editing existing files.`;
@@ -265,14 +266,18 @@ Please implement the requested change by editing existing files.`;
       process.exit(0);
     }
 
-    // Validate changes - reject if trying to create new files when it shouldn't
+    // Validate changes
     for (const change of result.changes) {
       if (change.action === 'create') {
         console.warn(`⚠️ Warning: Attempting to create new file ${change.file}`);
       }
-      if (change.file === 'package.json') {
-        console.error('❌ Rejecting change to package.json');
-        result.changes = result.changes.filter(c => c.file !== 'package.json');
+      if (change.file === 'package.json' || change.file === 'package-lock.json') {
+        if (allowDeps) {
+          console.log(`📦 Allowing package.json change (allow-deps label present)`);
+        } else {
+          console.error('❌ Rejecting change to package.json (add "allow-deps" label to permit)');
+          result.changes = result.changes.filter(c => c.file !== 'package.json' && c.file !== 'package-lock.json');
+        }
       }
     }
 
