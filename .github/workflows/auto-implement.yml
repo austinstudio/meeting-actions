@@ -2,12 +2,22 @@ name: Auto-Implement Issue
 
 on:
   issues:
-    types: [opened]
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
 
 jobs:
   implement:
-    # Only run for issues created from Meeting Actions app
-    if: contains(github.event.issue.body, 'Created from Meeting Actions')
+    # Run if:
+    # 1. Issue opened from Meeting Actions app, OR
+    # 2. allow-deps label added to a Meeting Actions issue, OR
+    # 3. Someone comments /retry on a Meeting Actions issue
+    if: |
+      contains(github.event.issue.body, 'Created from Meeting Actions') && (
+        github.event.action == 'opened' ||
+        (github.event.action == 'labeled' && github.event.label.name == 'allow-deps') ||
+        (github.event.action == 'created' && contains(github.event.comment.body, '/retry'))
+      )
     runs-on: ubuntu-latest
 
     permissions:
@@ -57,8 +67,38 @@ jobs:
             git push
           fi
 
-      - name: Comment on issue
-        if: success()
+      - name: Check implementation status
+        id: status
+        if: always()
+        run: |
+          if [ -f auto-implement-status.json ]; then
+            echo "status_exists=true" >> $GITHUB_OUTPUT
+            echo "needs_deps=$(jq -r '.needsDepsLabel' auto-implement-status.json)" >> $GITHUB_OUTPUT
+            echo "summary=$(jq -r '.summary' auto-implement-status.json)" >> $GITHUB_OUTPUT
+          else
+            echo "status_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment - needs dependencies label
+        if: steps.status.outputs.needs_deps == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `⚠️ **This change requires adding new dependencies.**
+
+            To proceed:
+            1. Add the \`allow-deps\` label to this issue
+            2. Re-run the workflow by closing and reopening this issue, or comment \`/retry\`
+
+            _The auto-implement bot will not add packages without explicit permission._`
+            })
+
+      - name: Comment on success
+        if: success() && steps.status.outputs.needs_deps != 'true'
         uses: actions/github-script@v7
         with:
           script: |

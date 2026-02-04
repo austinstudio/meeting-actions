@@ -267,6 +267,7 @@ Please implement the requested change by editing existing files.`;
     }
 
     // Validate changes
+    let needsDepsLabel = false;
     for (const change of result.changes) {
       if (change.action === 'create') {
         console.warn(`⚠️ Warning: Attempting to create new file ${change.file}`);
@@ -275,11 +276,21 @@ Please implement the requested change by editing existing files.`;
         if (allowDeps) {
           console.log(`📦 Allowing package.json change (allow-deps label present)`);
         } else {
-          console.error('❌ Rejecting change to package.json (add "allow-deps" label to permit)');
+          console.error('❌ This change requires new dependencies');
+          needsDepsLabel = true;
           result.changes = result.changes.filter(c => c.file !== 'package.json' && c.file !== 'package-lock.json');
         }
       }
     }
+
+    // Write status for the workflow to read
+    const status = {
+      needsDepsLabel,
+      analysis: result.analysis,
+      summary: result.summary,
+      changesApplied: result.changes.length,
+    };
+    fs.writeFileSync('auto-implement-status.json', JSON.stringify(status, null, 2));
 
     if (result.changes.length === 0) {
       console.log('\n⚠️ No valid changes to apply after filtering');
