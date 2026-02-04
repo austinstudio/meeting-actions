@@ -43,6 +43,9 @@ jobs:
         run: node scripts/auto-implement.js
 
       - name: Commit and push changes
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -50,11 +53,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Auto-implement: ${{ github.event.issue.title }}
-
-Closes #${{ github.event.issue.number }}
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
+            git commit -m "Auto-implement: ${ISSUE_TITLE} (closes #${ISSUE_NUMBER})"
             git push
           fi
 
