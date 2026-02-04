@@ -1773,7 +1773,7 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g., Sprint Planning, Client Call, 1:1 with Sarah"
-                className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                 disabled={isProcessing}
               />
               {uploadedFile && (
@@ -1928,7 +1928,7 @@ function AddColumnModal({ isOpen, onClose, onSubmit }) {
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g., Review, Blocked, Next Week"
-              className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
               autoFocus
             />
           </div>
@@ -2391,7 +2391,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                   value={formData.owner}
                   onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
                   placeholder="Me, John, Sarah, etc."
-                  className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                 />
               </div>
 
@@ -2404,7 +2404,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                   <select
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                   >
                     <option value="action">Action</option>
                     <option value="follow-up">Follow-up</option>
@@ -2422,7 +2422,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                       value={formData.person}
                       onChange={(e) => setFormData({ ...formData, person: e.target.value })}
                       placeholder="Person name"
-                      className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                     />
                   </div>
                 )}
@@ -2438,7 +2438,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                     type="date"
                     value={formData.dueDate}
                     onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                    className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                   />
                 </div>
                 <div>
@@ -2448,7 +2448,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                   <select
                     value={formData.priority}
                     onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                   >
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
@@ -2465,7 +2465,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                 >
                   {columns.map(col => (
                     <option key={col.id} value={col.id}>{col.label}</option>
@@ -3035,7 +3035,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
               value={formData.owner}
               onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
               placeholder="Me, John, Sarah, etc."
-              className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
             />
           </div>
 
@@ -3048,7 +3048,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
               <select
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
               >
                 <option value="action">Action</option>
                 <option value="follow-up">Follow-up</option>
@@ -3064,7 +3064,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
                   value={formData.person}
                   onChange={(e) => setFormData({ ...formData, person: e.target.value })}
                   placeholder="Person name"
-                  className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                  className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                 />
               </div>
             )}
@@ -3080,7 +3080,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
                 type="date"
                 value={formData.dueDate}
                 onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
               />
             </div>
             <div>
@@ -3090,7 +3090,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
               <select
                 value={formData.priority}
                 onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                className="w-full px-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
               >
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
