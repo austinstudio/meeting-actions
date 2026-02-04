@@ -51,7 +51,7 @@
     -moz-appearance: none;
     appearance: none;
     /* Add custom arrow with proper spacing */
-    background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"%3E%3Cpath fill="%236b7280" d="M6 8.5L2 4.5h8L6 8.5z"/%3E%3C/svg%3E');
+    background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"%3E%3Cpath stroke="%236b7280" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" d="M3 4.5L6 7.5L9 4.5"/%3E%3C/svg%3E');
     background-repeat: no-repeat;
     background-position: right 0.75rem center;
     /* Add padding to prevent text overlap with arrow */
@@ -60,16 +60,16 @@
 
   /* Dark mode select arrow */
   .dark select {
-    background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"%3E%3Cpath fill="%239ca3af" d="M6 8.5L2 4.5h8L6 8.5z"/%3E%3C/svg%3E');
+    background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"%3E%3Cpath stroke="%239ca3af" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" d="M3 4.5L6 7.5L9 4.5"/%3E%3C/svg%3E');
   }
 
   /* Hover state for select arrow */
   select:hover {
-    background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"%3E%3Cpath fill="%234b5563" d="M6 8.5L2 4.5h8L6 8.5z"/%3E%3C/svg%3E');
+    background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"%3E%3Cpath stroke="%234b5563" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" d="M3 4.5L6 7.5L9 4.5"/%3E%3C/svg%3E');
   }
 
   .dark select:hover {
-    background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"%3E%3Cpath fill="%23d1d5db" d="M6 8.5L2 4.5h8L6 8.5z"/%3E%3C/svg%3E');
+    background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"%3E%3Cpath stroke="%23d1d5db" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" d="M3 4.5L6 7.5L9 4.5"/%3E%3C/svg%3E');
   }
 }
 
