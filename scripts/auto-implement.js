@@ -141,6 +141,7 @@ Return ONLY a valid JSON object. For edits, use search/replace to specify change
       "action": "edit",
       "search": "exact string to find in the file",
       "replace": "string to replace it with",
+      "replace_all": false,
       "description": "what this change does"
     }
   ],
@@ -152,6 +153,7 @@ IMPORTANT for search/replace:
 - Keep search strings short but unique enough to match only once
 - For multiple changes in the same file, use multiple change objects
 - Include enough context in "search" to be unique (e.g., include the surrounding line or two)
+- Use "replace_all": true if you want to replace ALL occurrences of a pattern (useful for consistent styling changes)
 
 For creating NEW files (rare - prefer editing):
 {
@@ -283,6 +285,11 @@ Please implement the requested change by editing existing files.`;
     // Apply changes
     console.log(`\n🔧 Applying ${result.changes.length} change(s)...`);
 
+    // File cache to handle multiple edits to the same file
+    const fileCache = {};
+    let successCount = 0;
+    let failCount = 0;
+
     for (const change of result.changes) {
       const filePath = path.join(process.cwd(), change.file);
       const dirPath = path.dirname(filePath);
@@ -290,71 +297,108 @@ Please implement the requested change by editing existing files.`;
       console.log(`  ${change.action}: ${change.file}`);
       console.log(`    └─ ${change.description}`);
 
-      switch (change.action) {
-        case 'edit':
-          // Search and replace in existing file
-          if (!fs.existsSync(filePath)) {
-            console.error(`    ❌ File not found: ${change.file}`);
-            process.exit(1);
-          }
+      try {
+        switch (change.action) {
+          case 'edit':
+            // Search and replace in existing file
+            if (!fs.existsSync(filePath)) {
+              console.error(`    ❌ File not found: ${change.file}`);
+              failCount++;
+              continue;
+            }
 
-          let content = fs.readFileSync(filePath, 'utf-8');
+            // Use cached content if available (for multiple edits to same file)
+            if (!fileCache[filePath]) {
+              fileCache[filePath] = fs.readFileSync(filePath, 'utf-8');
+            }
+            let content = fileCache[filePath];
 
-          if (!change.search || change.replace === undefined) {
-            console.error(`    ❌ Edit requires search and replace fields`);
-            process.exit(1);
-          }
+            if (!change.search || change.replace === undefined) {
+              console.error(`    ❌ Edit requires search and replace fields`);
+              failCount++;
+              continue;
+            }
 
-          console.log(`    Searching for: "${change.search.substring(0, 80).replace(/\n/g, '\\n')}${change.search.length > 80 ? '...' : ''}"`);
+            console.log(`    Searching for: "${change.search.substring(0, 80).replace(/\n/g, '\\n')}${change.search.length > 80 ? '...' : ''}"`);
 
-          if (!content.includes(change.search)) {
-            console.error(`    ❌ Search string not found in file!`);
-            console.error(`    This usually means the search string doesn't exactly match the file content.`);
-            console.error(`    Search string (${change.search.length} chars):`);
-            console.error(change.search);
-            process.exit(1);
-          }
+            if (!content.includes(change.search)) {
+              console.error(`    ❌ Search string not found in file!`);
+              console.error(`    This usually means the search string doesn't exactly match the file content.`);
+              console.error(`    Search string (${change.search.length} chars):`);
+              console.error(change.search);
+              failCount++;
+              continue;
+            }
 
-          // Count occurrences
-          const occurrences = content.split(change.search).length - 1;
-          if (occurrences > 1) {
-            console.warn(`    ⚠️ Search string found ${occurrences} times, replacing first occurrence`);
-          }
+            // Count occurrences
+            const occurrences = content.split(change.search).length - 1;
 
-          const newContent = content.replace(change.search, change.replace);
+            let newContent;
+            if (change.replace_all && occurrences > 1) {
+              // Replace all occurrences
+              newContent = content.split(change.search).join(change.replace);
+              console.log(`    Replacing all ${occurrences} occurrences`);
+            } else {
+              // Replace first occurrence only
+              if (occurrences > 1) {
+                console.warn(`    ⚠️ Search string found ${occurrences} times, replacing first occurrence`);
+              }
+              newContent = content.replace(change.search, change.replace);
+            }
 
-          // Debug: Check if content actually changed
-          if (newContent === content) {
-            console.error(`    ❌ Replace resulted in identical content!`);
-            console.error(`    Search: ${change.search.substring(0, 100)}`);
-            console.error(`    Replace: ${change.replace.substring(0, 100)}`);
-            process.exit(1);
-          }
+            // Debug: Check if content actually changed
+            if (newContent === content) {
+              console.error(`    ❌ Replace resulted in identical content!`);
+              console.error(`    Search: ${change.search.substring(0, 100)}`);
+              console.error(`    Replace: ${change.replace.substring(0, 100)}`);
+              failCount++;
+              continue;
+            }
 
-          fs.writeFileSync(filePath, newContent);
-          console.log(`    ✓ Applied search/replace successfully`);
-          console.log(`    File size: ${content.length} -> ${newContent.length} bytes`);
-          break;
+            // Update cache and write file
+            fileCache[filePath] = newContent;
+            fs.writeFileSync(filePath, newContent);
+            console.log(`    ✓ Applied search/replace successfully`);
+            console.log(`    File size: ${content.length} -> ${newContent.length} bytes`);
+            successCount++;
+            break;
 
-        case 'create':
-          // Create new file
-          if (!fs.existsSync(dirPath)) {
-            fs.mkdirSync(dirPath, { recursive: true });
-          }
-          fs.writeFileSync(filePath, change.content);
-          console.log(`    ✓ Created file`);
-          break;
+          case 'create':
+            // Create new file
+            if (!fs.existsSync(dirPath)) {
+              fs.mkdirSync(dirPath, { recursive: true });
+            }
+            fs.writeFileSync(filePath, change.content);
+            console.log(`    ✓ Created file`);
+            successCount++;
+            break;
 
-        case 'delete':
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-            console.log(`    ✓ Deleted file`);
-          }
-          break;
+          case 'delete':
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+              console.log(`    ✓ Deleted file`);
+              successCount++;
+            }
+            break;
 
-        default:
-          console.warn(`    ⚠️ Unknown action: ${change.action}`);
+          default:
+            console.warn(`    ⚠️ Unknown action: ${change.action}`);
+        }
+      } catch (err) {
+        console.error(`    ❌ Error: ${err.message}`);
+        failCount++;
       }
+    }
+
+    console.log(`\n📊 Results: ${successCount} succeeded, ${failCount} failed`);
+
+    if (successCount === 0) {
+      console.error('\n❌ No changes were applied successfully');
+      process.exit(1);
+    }
+
+    if (failCount > 0) {
+      console.warn(`\n⚠️ Some changes failed but ${successCount} were applied`);
     }
 
     console.log('\n✅ All changes applied successfully');
