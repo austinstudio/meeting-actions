@@ -4343,6 +4343,44 @@ export default function MeetingKanban() {
                     What's New
                   </button>
 
+                  {/* GitHub Connection */}
+                  <div className="px-3 py-2 border-b border-slate-200 dark:border-neutral-800">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-neutral-300">
+                        <Github size={16} />
+                        {githubStatus?.connected ? (
+                          <span>@{githubStatus.username}</span>
+                        ) : (
+                          <span>GitHub</span>
+                        )}
+                      </div>
+                      {githubStatus?.connected ? (
+                        <button
+                          onClick={async () => {
+                            if (confirm('Disconnect your GitHub account?')) {
+                              try {
+                                await fetch('/api/github/status', { method: 'DELETE' });
+                                fetchGithubStatus();
+                              } catch (error) {
+                                console.error('Failed to disconnect GitHub:', error);
+                              }
+                            }
+                          }}
+                          className="text-xs text-slate-400 dark:text-neutral-500 hover:text-rose-500 dark:hover:text-rose-400"
+                        >
+                          Disconnect
+                        </button>
+                      ) : (
+                        <a
+                          href="/api/github/connect"
+                          className="text-xs text-indigo-600 dark:text-orange-500 hover:text-indigo-700 dark:hover:text-orange-400"
+                        >
+                          Connect
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
                   <button
                     onClick={() => signOut({ callbackUrl: '/login' })}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-neutral-800 rounded-b-lg"
