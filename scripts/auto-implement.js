@@ -59,24 +59,61 @@ function readFileSafely(filePath) {
   return null;
 }
 
-// Stream a message from Claude
-async function streamMessage(messages, system) {
+// Stream a message from Claude with extended thinking
+async function streamMessage(messages, system, useThinking = true) {
   let responseText = '';
+  let thinkingText = '';
 
-  const stream = anthropic.messages.stream({
+  const options = {
     model: MODEL,
     max_tokens: 16000,
     messages,
-    system,
+  };
+
+  // Extended thinking makes Claude reason through problems deeply
+  // This is the key difference that makes Claude Code "smarter"
+  if (useThinking) {
+    options.thinking = {
+      type: 'enabled',
+      budget_tokens: 10000,  // Allow up to 10k tokens for reasoning
+    };
+    // When using thinking, system prompt goes in user message
+    if (system) {
+      options.messages = [
+        { role: 'user', content: `${system}\n\n---\n\n${messages[0].content}` },
+        ...messages.slice(1)
+      ];
+    }
+  } else {
+    options.system = system;
+  }
+
+  const stream = anthropic.messages.stream(options);
+
+  stream.on('contentBlockStart', (block) => {
+    if (block.content_block?.type === 'thinking') {
+      process.stdout.write('\n💭 Thinking');
+    }
   });
 
-  stream.on('text', (text) => {
-    responseText += text;
-    process.stdout.write('.');
+  stream.on('contentBlockDelta', (delta) => {
+    if (delta.delta?.type === 'thinking_delta') {
+      thinkingText += delta.delta.thinking || '';
+      process.stdout.write('.');
+    } else if (delta.delta?.type === 'text_delta') {
+      responseText += delta.delta.text || '';
+      process.stdout.write('.');
+    }
   });
 
   await stream.finalMessage();
   console.log('');
+
+  if (thinkingText) {
+    console.log('\n💭 Claude\'s reasoning (summary):');
+    // Show first 500 chars of thinking to help debug
+    console.log(thinkingText.substring(0, 500) + (thinkingText.length > 500 ? '...' : ''));
+  }
 
   return responseText;
 }
@@ -149,10 +186,21 @@ Your task is to THINK THROUGH the problem carefully before any code is written. 
 
 ## CRITICAL: COMMON PITFALLS TO AVOID
 
-### CSS/Styling Pitfalls:
-- **Native <select> dropdown arrows**: You CANNOT move the browser's native dropdown arrow with padding or margin. The arrow is rendered by the browser outside your CSS control. To customize it, you must use \`appearance: none\` and add a custom arrow with background-image or an icon.
-- **Native <input type="date"> and <input type="time">**: Same issue - browser controls cannot be styled with simple padding.
-- **Tailwind spacing**: \`pr-8\` adds padding to the content area, NOT to browser-rendered controls.
+### CSS/Styling Pitfalls - THINK CAREFULLY ABOUT THESE:
+
+**Native browser controls CANNOT be styled with padding/margin:**
+- \`<select>\` dropdown arrows - The arrow is rendered BY THE BROWSER, not by CSS. Adding \`pr-8\` or \`padding-right\` does NOTHING to the arrow position.
+- \`<input type="date">\`, \`<input type="time">\` - Calendar/time picker icons are browser-controlled.
+
+**To actually style a native <select> dropdown arrow, you MUST:**
+1. Use \`appearance: none\` to remove the browser's default arrow entirely
+2. Add your own arrow using \`background-image\` with an SVG/icon
+3. Use \`background-position\` to place it where you want
+4. Example: \`appearance-none bg-[url('data:image/svg+xml,...')] bg-no-repeat bg-[right_0.5rem_center]\`
+
+**DO NOT just add padding and hope it fixes dropdown arrows - IT WON'T WORK.**
+
+**Ask yourself:** "Is this a native browser control? If yes, padding won't help."
 
 ### React/Next.js Pitfalls:
 - State updates are async - don't expect immediate updates
