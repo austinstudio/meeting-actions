@@ -41,16 +41,63 @@ function getJsFiles(dir, baseDir = dir) {
   return files;
 }
 
-// Read file with size limit
-function readFileSafely(filePath, maxChars = 100000) {
+// Read file with size limit, optionally extracting sections around keywords
+function readFileSafely(filePath, maxChars = 100000, keywords = []) {
   try {
     const fullPath = path.join(process.cwd(), filePath);
     if (fs.existsSync(fullPath)) {
       const content = fs.readFileSync(fullPath, 'utf-8');
-      if (content.length > maxChars) {
-        return content.substring(0, maxChars) + '\n\n... [FILE TRUNCATED - ' + (content.length - maxChars) + ' more characters]';
+
+      // If file is small enough, return it all
+      if (content.length <= maxChars) {
+        return content;
       }
-      return content;
+
+      // For large files, extract relevant sections around keywords
+      if (keywords.length > 0) {
+        const sections = [];
+        const sectionSize = 3000; // chars before and after each match
+        const usedRanges = [];
+
+        for (const keyword of keywords) {
+          const regex = new RegExp(keyword, 'gi');
+          let match;
+          while ((match = regex.exec(content)) !== null) {
+            const start = Math.max(0, match.index - sectionSize);
+            const end = Math.min(content.length, match.index + keyword.length + sectionSize);
+
+            // Check if this overlaps with existing ranges
+            const overlaps = usedRanges.some(r => !(end < r.start || start > r.end));
+            if (!overlaps) {
+              usedRanges.push({ start, end });
+            }
+          }
+        }
+
+        // Sort and merge overlapping ranges
+        usedRanges.sort((a, b) => a.start - b.start);
+
+        // Extract sections
+        for (const range of usedRanges) {
+          const lineStart = content.lastIndexOf('\n', range.start) + 1;
+          const lineEnd = content.indexOf('\n', range.end);
+          const section = content.substring(lineStart, lineEnd > 0 ? lineEnd : range.end);
+          sections.push(`... [LINE ~${content.substring(0, lineStart).split('\n').length}] ...\n${section}`);
+        }
+
+        if (sections.length > 0) {
+          const result = sections.join('\n\n... [SECTION BREAK] ...\n\n');
+          if (result.length <= maxChars) {
+            return `[LARGE FILE - SHOWING RELEVANT SECTIONS]\n\n${result}\n\n... [END OF SECTIONS]`;
+          }
+        }
+      }
+
+      // Fallback: show start and end of file
+      const halfMax = Math.floor(maxChars / 2);
+      return content.substring(0, halfMax) +
+        '\n\n... [MIDDLE OF FILE TRUNCATED - ' + (content.length - maxChars) + ' chars] ...\n\n' +
+        content.substring(content.length - halfMax);
     }
   } catch (e) {
     // Ignore errors
@@ -115,10 +162,19 @@ async function main() {
   const maxTotalChars = 150000; // ~37k tokens
   const includedFiles = [];
 
-  // First pass: priority files
+  // Extract meaningful keywords from issue for section extraction
+  const meaningfulKeywords = ['github', 'tooltip', 'icon', 'menu', 'user', 'button', 'Github'];
+  const issueKeywords = keywords.filter(k =>
+    k.length > 3 && !['this', 'that', 'with', 'from', 'have', 'will', 'should'].includes(k.toLowerCase())
+  );
+  const searchKeywords = [...new Set([...meaningfulKeywords, ...issueKeywords.slice(0, 10)])];
+
+  console.log(`Using keywords for section extraction: ${searchKeywords.join(', ')}`);
+
+  // First pass: priority files (with keyword extraction for large files)
   for (const file of priorityFiles) {
     if (totalChars >= maxTotalChars) break;
-    const content = readFileSafely(file, 80000);
+    const content = readFileSafely(file, 100000, searchKeywords);
     if (content) {
       fileContext += `### ${file}\n\`\`\`\n${content}\n\`\`\`\n\n`;
       totalChars += content.length;
