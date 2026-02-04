@@ -1413,7 +1413,7 @@ function SkeletonCard() {
   );
 }
 
-function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackground, canNotify, onBulkSubmit }) {
+function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackground, canNotify, onBulkSubmit, meetings = [] }) {
   const [title, setTitle] = useState('');
   const [transcript, setTranscript] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -1421,8 +1421,26 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
   const [uploadError, setUploadError] = useState(null);
   const [fileQueue, setFileQueue] = useState([]); // Queue for bulk upload
   const [bulkMode, setBulkMode] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(null); // { filename, existingMeeting }
   const fileInputRef = useRef(null);
   const bulkFileInputRef = useRef(null);
+
+  // Check if a filename already exists in meetings
+  const checkForDuplicate = (filename) => {
+    const normalizedFilename = filename.toLowerCase().trim();
+    const filenameWithoutExt = normalizedFilename.replace(/\.(pdf|txt)$/i, '');
+
+    return meetings.find(m => {
+      const sourceFileName = (m.sourceFileName || '').toLowerCase().trim();
+      const sourceFileNameWithoutExt = sourceFileName.replace(/\.(pdf|txt)$/i, '');
+      const title = (m.title || '').toLowerCase().trim();
+
+      // Compare without extensions on both sides
+      return sourceFileNameWithoutExt === filenameWithoutExt ||
+             sourceFileName === normalizedFilename ||
+             title === filenameWithoutExt;
+    });
+  };
 
   // Clear form when modal opens
   useEffect(() => {
@@ -1433,6 +1451,7 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
       setUploadError(null);
       setFileQueue([]);
       setBulkMode(false);
+      setDuplicateWarning(null);
     }
   }, [isOpen]);
 
@@ -1485,6 +1504,12 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
     if (file.size > 10 * 1024 * 1024) {
       setUploadError('File size must be less than 10MB');
       return;
+    }
+
+    // Check for duplicate
+    const existingMeeting = checkForDuplicate(file.name);
+    if (existingMeeting) {
+      setDuplicateWarning({ filename: file.name, existingMeeting });
     }
 
     setIsUploading(true);
@@ -1540,14 +1565,19 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
       setUploadError(`${files.length - validFiles.length} file(s) skipped (invalid type or too large)`);
     }
 
-    // Add files to queue with pending status
-    const newQueue = validFiles.map(file => ({
-      file,
-      name: file.name,
-      status: 'pending', // pending, parsing, parsed, error
-      text: null,
-      error: null
-    }));
+    // Add files to queue with pending status, checking for duplicates
+    const newQueue = validFiles.map(file => {
+      const existingMeeting = checkForDuplicate(file.name);
+      return {
+        file,
+        name: file.name,
+        status: 'pending', // pending, parsing, parsed, error
+        text: null,
+        error: null,
+        isDuplicate: !!existingMeeting,
+        existingMeeting: existingMeeting || null
+      };
+    });
 
     setFileQueue(newQueue);
     setBulkMode(true);
@@ -1645,6 +1675,7 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
                 <div
                   key={idx}
                   className={`flex items-center justify-between p-3 rounded-lg border ${
+                    item.status === 'parsed' && item.isDuplicate ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30' :
                     item.status === 'parsed' ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30' :
                     item.status === 'error' ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30' :
                     item.status === 'parsing' ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30' :
@@ -1653,6 +1684,7 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
                 >
                   <div className="flex items-center gap-3">
                     <File size={16} className={
+                      item.status === 'parsed' && item.isDuplicate ? 'text-amber-500' :
                       item.status === 'parsed' ? 'text-emerald-500' :
                       item.status === 'error' ? 'text-rose-500' :
                       item.status === 'parsing' ? 'text-blue-500' :
@@ -1663,8 +1695,14 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
                       {item.status === 'parsing' && (
                         <p className="text-xs text-blue-600 dark:text-blue-400">Parsing...</p>
                       )}
-                      {item.status === 'parsed' && (
+                      {item.status === 'parsed' && !item.isDuplicate && (
                         <p className="text-xs text-emerald-600 dark:text-emerald-400">Ready to import</p>
+                      )}
+                      {item.status === 'parsed' && item.isDuplicate && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                          <AlertTriangle size={10} />
+                          Duplicate - previously imported as "{item.existingMeeting?.title}"
+                        </p>
                       )}
                       {item.status === 'error' && (
                         <p className="text-xs text-rose-600 dark:text-rose-400">{item.error}</p>
@@ -1737,20 +1775,20 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
                 className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                 disabled={isProcessing}
               />
+              {uploadedFile && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1.5" title={uploadedFile}>
+                  <File size={12} className="flex-shrink-0" />
+                  <span className="truncate">{uploadedFile}</span>
+                </p>
+              )}
             </div>
 
             <div className="mb-4">
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-3">
                 <label className="block text-sm font-medium text-slate-700 dark:text-neutral-300">
                   Transcript <span className="text-rose-500">*</span>
                 </label>
                 <div className="flex items-center gap-2">
-                  {uploadedFile && (
-                    <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                      <File size={12} />
-                      {uploadedFile}
-                    </span>
-                  )}
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1800,6 +1838,16 @@ function PasteModal({ isOpen, onClose, onSubmit, isProcessing, onProcessInBackgr
               </div>
               {uploadError && (
                 <p className="text-xs text-rose-500 mb-2">{uploadError}</p>
+              )}
+              {duplicateWarning && (
+                <div className="mb-3 px-3 py-2 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-700 rounded-lg">
+                  <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                    <AlertTriangle size={12} className="flex-shrink-0" />
+                    <span className="truncate">
+                      Duplicate - previously imported as "{duplicateWarning.existingMeeting.title}"
+                    </span>
+                  </p>
+                </div>
               )}
               <textarea
                 value={transcript}
@@ -4584,6 +4632,7 @@ export default function MeetingKanban() {
         isProcessing={isProcessing}
         onProcessInBackground={handleProcessInBackground}
         canNotify={canNotify}
+        meetings={meetings}
       />
       
       <AddColumnModal
