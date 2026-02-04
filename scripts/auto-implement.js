@@ -170,23 +170,37 @@ Your task is to implement changes based on GitHub issues.
 
 ## RESPONSE FORMAT:
 
-Return ONLY a valid JSON object:
+Return ONLY a valid JSON object. For edits, use search/replace to specify changes (NOT full file content):
+
 {
   "analysis": "Where I found the relevant code and what I'm changing",
   "changes": [
     {
       "file": "path/to/existing/file.js",
       "action": "edit",
-      "content": "FULL file content with changes applied",
+      "search": "exact string to find in the file",
+      "replace": "string to replace it with",
       "description": "what this change does"
     }
   ],
   "summary": "One sentence summary"
 }
 
-For edits, you MUST return the COMPLETE file content, not just the changed parts.
+IMPORTANT for search/replace:
+- The "search" string must be an EXACT match of existing code (copy it precisely, including whitespace)
+- Keep search strings short but unique enough to match only once
+- For multiple changes in the same file, use multiple change objects
+- Include enough context in "search" to be unique (e.g., include the surrounding line or two)
 
-If you cannot implement (unclear requirements, would require creating new files when existing code should be edited, etc.):
+For creating NEW files (rare - prefer editing):
+{
+  "file": "path/to/new/file.js",
+  "action": "create",
+  "content": "full file content",
+  "description": "what this file does"
+}
+
+If you cannot implement:
 {
   "analysis": "explanation",
   "changes": [],
@@ -308,18 +322,50 @@ Please implement the requested change by editing existing files.`;
       console.log(`    └─ ${change.description}`);
 
       switch (change.action) {
-        case 'create':
         case 'edit':
-          // Ensure directory exists
+          // Search and replace in existing file
+          if (!fs.existsSync(filePath)) {
+            console.error(`    ❌ File not found: ${change.file}`);
+            continue;
+          }
+
+          let content = fs.readFileSync(filePath, 'utf-8');
+
+          if (!change.search || !change.replace === undefined) {
+            console.error(`    ❌ Edit requires search and replace fields`);
+            continue;
+          }
+
+          if (!content.includes(change.search)) {
+            console.error(`    ❌ Search string not found in file`);
+            console.error(`    Search: ${change.search.substring(0, 100)}...`);
+            continue;
+          }
+
+          // Count occurrences
+          const occurrences = content.split(change.search).length - 1;
+          if (occurrences > 1) {
+            console.warn(`    ⚠️ Search string found ${occurrences} times, replacing first occurrence`);
+          }
+
+          content = content.replace(change.search, change.replace);
+          fs.writeFileSync(filePath, content);
+          console.log(`    ✓ Applied search/replace`);
+          break;
+
+        case 'create':
+          // Create new file
           if (!fs.existsSync(dirPath)) {
             fs.mkdirSync(dirPath, { recursive: true });
           }
           fs.writeFileSync(filePath, change.content);
+          console.log(`    ✓ Created file`);
           break;
 
         case 'delete':
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
+            console.log(`    ✓ Deleted file`);
           }
           break;
 
