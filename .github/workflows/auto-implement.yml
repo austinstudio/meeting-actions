@@ -78,8 +78,22 @@ jobs:
           echo "=== Git diff ==="
           git diff --stat
 
-          # Add source files
-          git add pages/ lib/ components/ styles/ scripts/ 2>/dev/null || true
+          # Add source files - use individual commands to avoid one failure stopping others
+          echo "Adding pages/"
+          git add pages/ && echo "  Added pages/" || echo "  Failed to add pages/"
+          echo "Adding lib/"
+          git add lib/ && echo "  Added lib/" || echo "  Failed to add lib/"
+          echo "Adding components/"
+          git add components/ 2>/dev/null && echo "  Added components/" || echo "  No components/ directory"
+          echo "Adding styles/"
+          git add styles/ 2>/dev/null && echo "  Added styles/" || echo "  No styles/ directory"
+          echo "Adding scripts/"
+          git add scripts/ && echo "  Added scripts/" || echo "  Failed to add scripts/"
+
+          # Fallback: explicitly add any modified tracked files
+          echo "=== Adding any remaining modified files ==="
+          git add -u
+          git status --short
 
           # Debug: Show staged changes
           echo "=== Staged changes ==="
