@@ -112,11 +112,36 @@ jobs:
         run: |
           if [ -f auto-implement-status.json ]; then
             echo "status_exists=true" >> $GITHUB_OUTPUT
-            echo "needs_deps=$(jq -r '.needsDepsLabel' auto-implement-status.json)" >> $GITHUB_OUTPUT
-            echo "summary=$(jq -r '.summary' auto-implement-status.json)" >> $GITHUB_OUTPUT
+            echo "needs_deps=$(jq -r '.needsDepsLabel // false' auto-implement-status.json)" >> $GITHUB_OUTPUT
+            echo "needs_clarification=$(jq -r '.needsClarification // false' auto-implement-status.json)" >> $GITHUB_OUTPUT
+            echo "clarification_needed=$(jq -r '.clarificationNeeded // ""' auto-implement-status.json)" >> $GITHUB_OUTPUT
+            echo "summary=$(jq -r '.summary // ""' auto-implement-status.json)" >> $GITHUB_OUTPUT
+            echo "analysis=$(jq -r '.analysis // ""' auto-implement-status.json)" >> $GITHUB_OUTPUT
           else
             echo "status_exists=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Comment - needs clarification
+        if: steps.status.outputs.needs_clarification == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const clarification = `${{ steps.status.outputs.clarification_needed }}`;
+            const analysis = `${{ steps.status.outputs.analysis }}`;
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `🤔 **I need more information to implement this correctly.**
+
+**What I understood:** ${analysis}
+
+**What I need to know:** ${clarification}
+
+Please update the issue description with more details, or reply to this comment with the information needed. Then comment \`/retry\` to try again.
+
+_The auto-implement bot prefers to ask for clarification rather than implement something incorrectly._`
+            })
 
       - name: Comment - needs dependencies label
         if: steps.status.outputs.needs_deps == 'true'
@@ -137,7 +162,7 @@ jobs:
             })
 
       - name: Comment on success
-        if: success() && steps.status.outputs.needs_deps != 'true'
+        if: success() && steps.status.outputs.needs_deps != 'true' && steps.status.outputs.needs_clarification != 'true'
         uses: actions/github-script@v7
         with:
           script: |

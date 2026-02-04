@@ -2,7 +2,10 @@
 
 /**
  * Auto-implement script for GitHub Actions
- * Reads an issue and uses Claude via AWS Bedrock to generate code changes
+ * Uses a two-pass approach with Claude to analyze and implement changes
+ *
+ * Pass 1: Analyze the issue and propose an approach (thinking step)
+ * Pass 2: Generate the actual code changes
  */
 
 const AnthropicBedrock = require('@anthropic-ai/bedrock-sdk');
@@ -14,6 +17,8 @@ const anthropic = new AnthropicBedrock({
   awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY,
   awsRegion: process.env.AWS_REGION || 'us-east-1',
 });
+
+const MODEL = 'us.anthropic.claude-opus-4-20250514-v1:0';
 
 // Get all JS files in a directory recursively
 function getJsFiles(dir, baseDir = dir) {
@@ -31,7 +36,7 @@ function getJsFiles(dir, baseDir = dir) {
 
       if (entry.isDirectory()) {
         files.push(...getJsFiles(fullPath, baseDir));
-      } else if (entry.name.endsWith('.js') || entry.name.endsWith('.json') || entry.name.endsWith('.md')) {
+      } else if (entry.name.endsWith('.js') || entry.name.endsWith('.json') || entry.name.endsWith('.md') || entry.name.endsWith('.css')) {
         files.push(relativePath);
       }
     }
@@ -54,6 +59,28 @@ function readFileSafely(filePath) {
   return null;
 }
 
+// Stream a message from Claude
+async function streamMessage(messages, system) {
+  let responseText = '';
+
+  const stream = anthropic.messages.stream({
+    model: MODEL,
+    max_tokens: 16000,
+    messages,
+    system,
+  });
+
+  stream.on('text', (text) => {
+    responseText += text;
+    process.stdout.write('.');
+  });
+
+  await stream.finalMessage();
+  console.log('');
+
+  return responseText;
+}
+
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
   const issueTitle = process.env.ISSUE_TITLE;
@@ -73,7 +100,6 @@ async function main() {
   console.log(`Found ${allFiles.length} files in project`);
 
   let fileContext = '';
-  let totalChars = 0;
   const includedFiles = [];
 
   // Files to skip (not useful for code changes)
@@ -85,92 +111,77 @@ async function main() {
     '.env',
   ];
 
-  // Read ALL source files fully - Claude has 200k token context
+  // Read ALL source files fully
   for (const file of allFiles) {
-    // Skip non-essential files
     if (skipFiles.some(skip => file.endsWith(skip))) continue;
     if (file.includes('node_modules')) continue;
 
     const content = readFileSafely(file);
     if (content) {
       fileContext += `### ${file}\n\`\`\`\n${content}\n\`\`\`\n\n`;
-      totalChars += content.length;
       includedFiles.push(file);
     }
   }
 
-  console.log(`Including ${includedFiles.length} files in context: ${includedFiles.join(', ')}`);
+  console.log(`Including ${includedFiles.length} files in context`);
 
-  // Also provide file listing for reference
   const fileListStr = allFiles.join('\n');
 
-  const systemPrompt = `You are an expert software engineer working on a Next.js application called "Meeting Actions".
-Your task is to implement changes based on GitHub issues.
+  // ============================================================
+  // PASS 1: ANALYSIS - Think through the problem before coding
+  // ============================================================
 
-## CRITICAL RULES - READ CAREFULLY:
+  const analysisSystemPrompt = `You are an expert software engineer analyzing a GitHub issue for a Next.js application called "Meeting Actions".
 
-1. **ALWAYS EDIT EXISTING FILES** - Do NOT create new files unless absolutely necessary. The codebase already has established patterns. Find where similar code exists and modify it there.
+Your task is to THINK THROUGH the problem carefully before any code is written. You must:
 
-2. **AVOID MODIFYING package.json** - Only add dependencies if absolutely necessary AND the issue has the "allow-deps" label. Otherwise, work with what's already installed.
+1. **Understand what's being asked** - What exactly does the user want? Is it clear or ambiguous?
 
-3. **FIND THE RIGHT LOCATION** - Before making changes, analyze where similar functionality exists in the codebase. For UI changes, look in pages/index.js which contains most components.
+2. **Identify the right approach** - What's the correct technical solution? Consider:
+   - Where in the codebase should this change be made?
+   - What's the right pattern to use?
+   - Are there any technical limitations or gotchas?
 
-4. **MINIMAL CHANGES** - Make the smallest possible change to implement the feature. Don't refactor, don't "improve" other code, don't add error handling that wasn't asked for.
+3. **Decide if you can implement it** - Be honest about whether:
+   - The request is clear enough to implement
+   - You have enough information
+   - The change is technically feasible with the current approach
 
-5. **MATCH EXISTING STYLE** - Copy the exact patterns, naming conventions, and styling classes used in the existing code.
+## CRITICAL: COMMON PITFALLS TO AVOID
 
-6. **SEARCH BEFORE CREATING** - If the issue mentions a feature (like "GitHub icon" or "user menu"), search the provided code to find where it already exists.
+### CSS/Styling Pitfalls:
+- **Native <select> dropdown arrows**: You CANNOT move the browser's native dropdown arrow with padding or margin. The arrow is rendered by the browser outside your CSS control. To customize it, you must use \`appearance: none\` and add a custom arrow with background-image or an icon.
+- **Native <input type="date"> and <input type="time">**: Same issue - browser controls cannot be styled with simple padding.
+- **Tailwind spacing**: \`pr-8\` adds padding to the content area, NOT to browser-rendered controls.
 
-## COMMON PATTERNS IN THIS CODEBASE:
+### React/Next.js Pitfalls:
+- State updates are async - don't expect immediate updates
+- useEffect dependencies matter - missing deps cause bugs
+- Event handlers need proper binding
 
-- UI components are in pages/index.js (it's a large single-file app)
-- Tooltips use the \`title\` attribute on elements
-- Icons come from lucide-react (already imported)
-- Tailwind CSS for styling
-- The user menu is in pages/index.js around the session/user avatar area
+### General Pitfalls:
+- Don't add padding/margin to fix alignment issues without understanding the root cause
+- Don't apply changes to ALL similar elements when only SOME need fixing
+- Don't guess - if you're not sure what the user wants, say so
 
-## RESPONSE FORMAT:
+## RESPONSE FORMAT
 
-Return ONLY a valid JSON object. For edits, use search/replace to specify changes (NOT full file content):
+Respond with a JSON object:
 
 {
-  "analysis": "Where I found the relevant code and what I'm changing",
-  "changes": [
-    {
-      "file": "path/to/existing/file.js",
-      "action": "edit",
-      "search": "exact string to find in the file",
-      "replace": "string to replace it with",
-      "replace_all": false,
-      "description": "what this change does"
-    }
-  ],
-  "summary": "One sentence summary"
+  "understanding": "What I understand the user is asking for",
+  "technical_analysis": "The technical approach I would take and why",
+  "potential_issues": ["Any concerns or limitations"],
+  "confidence": "high" | "medium" | "low",
+  "recommendation": "proceed" | "needs_clarification",
+  "clarification_needed": "If needs_clarification, what specific questions would help",
+  "implementation_plan": "If proceeding, step-by-step plan for the changes"
 }
 
-IMPORTANT for search/replace:
-- The "search" string must be an EXACT match of existing code (copy it precisely, including whitespace)
-- Keep search strings short but unique enough to match only once
-- For multiple changes in the same file, use multiple change objects
-- Include enough context in "search" to be unique (e.g., include the surrounding line or two)
-- Use "replace_all": true if you want to replace ALL occurrences of a pattern (useful for consistent styling changes)
+If confidence is "low" or you're unsure about the right approach, set recommendation to "needs_clarification".
+It's BETTER to ask for clarification than to implement something wrong.`;
 
-For creating NEW files (rare - prefer editing):
-{
-  "file": "path/to/new/file.js",
-  "action": "create",
-  "content": "full file content",
-  "description": "what this file does"
-}
-
-If you cannot implement:
-{
-  "analysis": "explanation",
-  "changes": [],
-  "summary": "Could not auto-implement: reason"
-}`;
-
-  const userPrompt = `## Issue #${issueNumber}: ${issueTitle}
+  const analysisUserPrompt = `## Issue #${issueNumber}: ${issueTitle}
 
 ### Issue Type
 ${isEnhancement ? 'Enhancement' : isBug ? 'Bug Fix' : 'Task'}
@@ -193,220 +204,312 @@ ${fileContext}
 
 ---
 
-IMPORTANT REMINDERS:
-- The user menu with GitHub icon is in pages/index.js - search for "Github" or "githubStatus" to find it
-- DO NOT create new component files - edit pages/index.js directly
-- ${allowDeps ? 'New dependencies ARE allowed for this issue (allow-deps label present)' : 'DO NOT modify package.json - no new dependencies allowed'}
-- Use the \`title\` attribute for simple tooltips
+Please analyze this issue carefully. Think through the problem before proposing a solution.
+- What exactly is being asked?
+- What's the RIGHT way to implement this (not just A way)?
+- Are there any technical gotchas or limitations?
+- Do you have enough information to implement this correctly?`;
 
-Please implement the requested change by editing existing files.`;
+  console.log('\n📊 PASS 1: Analyzing issue...');
 
-  console.log('Calling Claude API with streaming...');
-
+  let analysisResponse;
   try {
-    // Use streaming for large requests (required for >10 min operations)
-    let responseText = '';
+    const responseText = await streamMessage(
+      [{ role: 'user', content: analysisUserPrompt }],
+      analysisSystemPrompt
+    );
 
-    const stream = anthropic.messages.stream({
-      model: 'us.anthropic.claude-opus-4-20250514-v1:0',
-      max_tokens: 32000,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
-      system: systemPrompt,
-    });
-
-    stream.on('text', (text) => {
-      responseText += text;
-      process.stdout.write('.');
-    });
-
-    await stream.finalMessage();
-    console.log('\nReceived response from Claude');
-
-    // Parse JSON response
-    let result;
-    try {
-      // Try to extract JSON from the response (in case there's extra text)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
-      }
-    } catch (parseError) {
-      console.error('Failed to parse Claude response as JSON:', parseError);
-      console.error('Raw response:', responseText);
-      process.exit(1);
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      analysisResponse = JSON.parse(jsonMatch[0]);
+    } else {
+      throw new Error('No JSON found in analysis response');
     }
+  } catch (error) {
+    console.error('Failed to parse analysis response:', error);
+    process.exit(1);
+  }
 
-    console.log('\n📋 Analysis:', result.analysis);
-    console.log('📝 Summary:', result.summary);
+  console.log('\n📋 Understanding:', analysisResponse.understanding);
+  console.log('🔍 Technical Analysis:', analysisResponse.technical_analysis);
+  console.log('⚠️  Potential Issues:', analysisResponse.potential_issues?.join(', ') || 'None identified');
+  console.log('📈 Confidence:', analysisResponse.confidence);
+  console.log('💡 Recommendation:', analysisResponse.recommendation);
 
-    if (!result.changes || result.changes.length === 0) {
-      console.log('\n⚠️ No changes to apply');
-      process.exit(0);
-    }
+  // Check if we should proceed or need clarification
+  if (analysisResponse.recommendation === 'needs_clarification') {
+    console.log('\n❓ Clarification needed:', analysisResponse.clarification_needed);
 
-    // Validate changes
-    let needsDepsLabel = false;
-    for (const change of result.changes) {
-      if (change.action === 'create') {
-        console.warn(`⚠️ Warning: Attempting to create new file ${change.file}`);
-      }
-      if (change.file === 'package.json' || change.file === 'package-lock.json') {
-        if (allowDeps) {
-          console.log(`📦 Allowing package.json change (allow-deps label present)`);
-        } else {
-          console.error('❌ This change requires new dependencies');
-          needsDepsLabel = true;
-          result.changes = result.changes.filter(c => c.file !== 'package.json' && c.file !== 'package-lock.json');
-        }
-      }
-    }
-
-    // Write status for the workflow to read
+    // Write status for the workflow
     const status = {
-      needsDepsLabel,
-      analysis: result.analysis,
-      summary: result.summary,
-      changesApplied: result.changes.length,
+      needsClarification: true,
+      analysis: analysisResponse.understanding,
+      clarificationNeeded: analysisResponse.clarification_needed,
+      summary: `Could not auto-implement: ${analysisResponse.clarification_needed}`,
     };
     fs.writeFileSync('auto-implement-status.json', JSON.stringify(status, null, 2));
 
-    if (result.changes.length === 0) {
-      console.log('\n⚠️ No valid changes to apply after filtering');
-      process.exit(0);
+    console.log('\n⏸️  Stopping - clarification needed before implementation');
+    process.exit(0);
+  }
+
+  if (analysisResponse.confidence === 'low') {
+    console.log('\n⚠️  Low confidence - proceeding with caution');
+  }
+
+  // ============================================================
+  // PASS 2: IMPLEMENTATION - Generate the actual code changes
+  // ============================================================
+
+  const implementationSystemPrompt = `You are an expert software engineer implementing a change for a Next.js application called "Meeting Actions".
+
+You have already analyzed this issue and have a clear plan. Now generate the exact code changes.
+
+## YOUR ANALYSIS AND PLAN:
+${JSON.stringify(analysisResponse, null, 2)}
+
+## CRITICAL RULES:
+
+1. **FOLLOW YOUR PLAN** - Implement exactly what you analyzed, don't deviate.
+
+2. **ALWAYS EDIT EXISTING FILES** - Do NOT create new files unless absolutely necessary.
+
+3. **AVOID MODIFYING package.json** - Only add dependencies if the issue has "allow-deps" label.
+
+4. **MINIMAL CHANGES** - Make the smallest possible change. Don't refactor or "improve" other code.
+
+5. **MATCH EXISTING STYLE** - Copy exact patterns from the codebase.
+
+## RESPONSE FORMAT:
+
+Return ONLY a valid JSON object:
+
+{
+  "analysis": "Brief summary of what you're changing and why",
+  "changes": [
+    {
+      "file": "path/to/file.js",
+      "action": "edit",
+      "search": "exact string to find (copy precisely, including whitespace)",
+      "replace": "string to replace it with",
+      "replace_all": false,
+      "description": "what this change does"
     }
+  ],
+  "summary": "One sentence summary of the implementation"
+}
 
-    // Apply changes
-    console.log(`\n🔧 Applying ${result.changes.length} change(s)...`);
+For search/replace:
+- The "search" string must be an EXACT match (copy it precisely)
+- Keep search strings unique enough to match only once
+- Use "replace_all": true only if you need to change ALL occurrences
+- Include enough context to be unique
 
-    // File cache to handle multiple edits to the same file
-    const fileCache = {};
-    let successCount = 0;
-    let failCount = 0;
+If you realize you cannot implement this correctly:
+{
+  "analysis": "Why this cannot be implemented",
+  "changes": [],
+  "summary": "Could not implement: reason"
+}`;
 
-    for (const change of result.changes) {
-      const filePath = path.join(process.cwd(), change.file);
-      const dirPath = path.dirname(filePath);
+  const implementationUserPrompt = `Now implement the changes based on your analysis.
 
-      console.log(`  ${change.action}: ${change.file}`);
-      console.log(`    └─ ${change.description}`);
+## Issue #${issueNumber}: ${issueTitle}
 
-      try {
-        switch (change.action) {
-          case 'edit':
-            // Search and replace in existing file
-            if (!fs.existsSync(filePath)) {
-              console.error(`    ❌ File not found: ${change.file}`);
-              failCount++;
-              continue;
-            }
+### Issue Description
+${issueBody}
 
-            // Use cached content if available (for multiple edits to same file)
-            if (!fileCache[filePath]) {
-              fileCache[filePath] = fs.readFileSync(filePath, 'utf-8');
-            }
-            let content = fileCache[filePath];
+---
 
-            if (!change.search || change.replace === undefined) {
-              console.error(`    ❌ Edit requires search and replace fields`);
-              failCount++;
-              continue;
-            }
+## Source Code Context
 
-            console.log(`    Searching for: "${change.search.substring(0, 80).replace(/\n/g, '\\n')}${change.search.length > 80 ? '...' : ''}"`);
+${fileContext}
 
-            if (!content.includes(change.search)) {
-              console.error(`    ❌ Search string not found in file!`);
-              console.error(`    This usually means the search string doesn't exactly match the file content.`);
-              console.error(`    Search string (${change.search.length} chars):`);
-              console.error(change.search);
-              failCount++;
-              continue;
-            }
+---
 
-            // Count occurrences
-            const occurrences = content.split(change.search).length - 1;
+REMINDERS:
+- ${allowDeps ? 'New dependencies ARE allowed (allow-deps label present)' : 'DO NOT modify package.json'}
+- Follow your implementation plan exactly
+- Make minimal, targeted changes`;
 
-            let newContent;
-            if (change.replace_all && occurrences > 1) {
-              // Replace all occurrences
-              newContent = content.split(change.search).join(change.replace);
-              console.log(`    Replacing all ${occurrences} occurrences`);
-            } else {
-              // Replace first occurrence only
-              if (occurrences > 1) {
-                console.warn(`    ⚠️ Search string found ${occurrences} times, replacing first occurrence`);
-              }
-              newContent = content.replace(change.search, change.replace);
-            }
+  console.log('\n🔧 PASS 2: Generating implementation...');
 
-            // Debug: Check if content actually changed
-            if (newContent === content) {
-              console.error(`    ❌ Replace resulted in identical content!`);
-              console.error(`    Search: ${change.search.substring(0, 100)}`);
-              console.error(`    Replace: ${change.replace.substring(0, 100)}`);
-              failCount++;
-              continue;
-            }
+  let result;
+  try {
+    const responseText = await streamMessage(
+      [{ role: 'user', content: implementationUserPrompt }],
+      implementationSystemPrompt
+    );
 
-            // Update cache and write file
-            fileCache[filePath] = newContent;
-            fs.writeFileSync(filePath, newContent);
-            console.log(`    ✓ Applied search/replace successfully`);
-            console.log(`    File size: ${content.length} -> ${newContent.length} bytes`);
-            successCount++;
-            break;
-
-          case 'create':
-            // Create new file
-            if (!fs.existsSync(dirPath)) {
-              fs.mkdirSync(dirPath, { recursive: true });
-            }
-            fs.writeFileSync(filePath, change.content);
-            console.log(`    ✓ Created file`);
-            successCount++;
-            break;
-
-          case 'delete':
-            if (fs.existsSync(filePath)) {
-              fs.unlinkSync(filePath);
-              console.log(`    ✓ Deleted file`);
-              successCount++;
-            }
-            break;
-
-          default:
-            console.warn(`    ⚠️ Unknown action: ${change.action}`);
-        }
-      } catch (err) {
-        console.error(`    ❌ Error: ${err.message}`);
-        failCount++;
-      }
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      result = JSON.parse(jsonMatch[0]);
+    } else {
+      throw new Error('No JSON found in implementation response');
     }
-
-    console.log(`\n📊 Results: ${successCount} succeeded, ${failCount} failed`);
-
-    if (successCount === 0) {
-      console.error('\n❌ No changes were applied successfully');
-      process.exit(1);
-    }
-
-    if (failCount > 0) {
-      console.warn(`\n⚠️ Some changes failed but ${successCount} were applied`);
-    }
-
-    console.log('\n✅ All changes applied successfully');
-
   } catch (error) {
-    console.error('Error calling Claude API:', error);
+    console.error('Failed to parse implementation response:', error);
     process.exit(1);
   }
+
+  console.log('\n📋 Analysis:', result.analysis);
+  console.log('📝 Summary:', result.summary);
+
+  if (!result.changes || result.changes.length === 0) {
+    console.log('\n⚠️ No changes to apply');
+
+    const status = {
+      needsClarification: false,
+      analysis: result.analysis,
+      summary: result.summary,
+      changesApplied: 0,
+    };
+    fs.writeFileSync('auto-implement-status.json', JSON.stringify(status, null, 2));
+
+    process.exit(0);
+  }
+
+  // Validate changes
+  let needsDepsLabel = false;
+  for (const change of result.changes) {
+    if (change.action === 'create') {
+      console.warn(`⚠️ Warning: Attempting to create new file ${change.file}`);
+    }
+    if (change.file === 'package.json' || change.file === 'package-lock.json') {
+      if (allowDeps) {
+        console.log(`📦 Allowing package.json change (allow-deps label present)`);
+      } else {
+        console.error('❌ This change requires new dependencies');
+        needsDepsLabel = true;
+        result.changes = result.changes.filter(c => c.file !== 'package.json' && c.file !== 'package-lock.json');
+      }
+    }
+  }
+
+  // Write status for the workflow
+  const status = {
+    needsDepsLabel,
+    needsClarification: false,
+    analysis: result.analysis,
+    summary: result.summary,
+    changesApplied: result.changes.length,
+    implementationPlan: analysisResponse.implementation_plan,
+  };
+  fs.writeFileSync('auto-implement-status.json', JSON.stringify(status, null, 2));
+
+  if (result.changes.length === 0) {
+    console.log('\n⚠️ No valid changes to apply after filtering');
+    process.exit(0);
+  }
+
+  // Apply changes
+  console.log(`\n🔧 Applying ${result.changes.length} change(s)...`);
+
+  const fileCache = {};
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const change of result.changes) {
+    const filePath = path.join(process.cwd(), change.file);
+    const dirPath = path.dirname(filePath);
+
+    console.log(`  ${change.action}: ${change.file}`);
+    console.log(`    └─ ${change.description}`);
+
+    try {
+      switch (change.action) {
+        case 'edit':
+          if (!fs.existsSync(filePath)) {
+            console.error(`    ❌ File not found: ${change.file}`);
+            failCount++;
+            continue;
+          }
+
+          if (!fileCache[filePath]) {
+            fileCache[filePath] = fs.readFileSync(filePath, 'utf-8');
+          }
+          let content = fileCache[filePath];
+
+          if (!change.search || change.replace === undefined) {
+            console.error(`    ❌ Edit requires search and replace fields`);
+            failCount++;
+            continue;
+          }
+
+          console.log(`    Searching for: "${change.search.substring(0, 80).replace(/\n/g, '\\n')}${change.search.length > 80 ? '...' : ''}"`);
+
+          if (!content.includes(change.search)) {
+            console.error(`    ❌ Search string not found in file!`);
+            console.error(`    Search string (${change.search.length} chars):`);
+            console.error(change.search.substring(0, 200));
+            failCount++;
+            continue;
+          }
+
+          const occurrences = content.split(change.search).length - 1;
+
+          let newContent;
+          if (change.replace_all && occurrences > 1) {
+            newContent = content.split(change.search).join(change.replace);
+            console.log(`    Replacing all ${occurrences} occurrences`);
+          } else {
+            if (occurrences > 1) {
+              console.warn(`    ⚠️ Search string found ${occurrences} times, replacing first occurrence`);
+            }
+            newContent = content.replace(change.search, change.replace);
+          }
+
+          if (newContent === content) {
+            console.error(`    ❌ Replace resulted in identical content!`);
+            failCount++;
+            continue;
+          }
+
+          fileCache[filePath] = newContent;
+          fs.writeFileSync(filePath, newContent);
+          console.log(`    ✓ Applied successfully`);
+          console.log(`    File size: ${content.length} -> ${newContent.length} bytes`);
+          successCount++;
+          break;
+
+        case 'create':
+          if (!fs.existsSync(dirPath)) {
+            fs.mkdirSync(dirPath, { recursive: true });
+          }
+          fs.writeFileSync(filePath, change.content);
+          console.log(`    ✓ Created file`);
+          successCount++;
+          break;
+
+        case 'delete':
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`    ✓ Deleted file`);
+            successCount++;
+          }
+          break;
+
+        default:
+          console.warn(`    ⚠️ Unknown action: ${change.action}`);
+      }
+    } catch (err) {
+      console.error(`    ❌ Error: ${err.message}`);
+      failCount++;
+    }
+  }
+
+  console.log(`\n📊 Results: ${successCount} succeeded, ${failCount} failed`);
+
+  if (successCount === 0) {
+    console.error('\n❌ No changes were applied successfully');
+    process.exit(1);
+  }
+
+  if (failCount > 0) {
+    console.warn(`\n⚠️ Some changes failed but ${successCount} were applied`);
+  }
+
+  console.log('\n✅ Implementation complete');
 }
 
 main();
