@@ -2,14 +2,18 @@
 
 /**
  * Auto-implement script for GitHub Actions
- * Reads an issue and uses Claude API to generate code changes
+ * Reads an issue and uses Claude via AWS Bedrock to generate code changes
  */
 
-const Anthropic = require('@anthropic-ai/sdk');
+const AnthropicBedrock = require('@anthropic-ai/bedrock-sdk');
 const fs = require('fs');
 const path = require('path');
 
-const anthropic = new Anthropic();
+const anthropic = new AnthropicBedrock({
+  awsAccessKey: process.env.AWS_ACCESS_KEY_ID,
+  awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY,
+  awsRegion: process.env.AWS_REGION || 'us-east-1',
+});
 
 // Files to include in context (adjust based on your project)
 const CONTEXT_FILES = [
@@ -123,7 +127,7 @@ Please implement the changes requested in this issue. Remember to return valid J
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
       max_tokens: 8000,
       messages: [
         {
