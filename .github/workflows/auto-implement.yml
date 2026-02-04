@@ -59,7 +59,12 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add -A
+          # Reset package files that may have been modified by npm install
+          git checkout -- package.json package-lock.json 2>/dev/null || true
+          # Remove status file from staging
+          rm -f auto-implement-status.json
+          # Only add source files, not generated files
+          git add pages/ lib/ components/ styles/ scripts/ 2>/dev/null || true
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else

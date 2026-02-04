@@ -326,20 +326,24 @@ Please implement the requested change by editing existing files.`;
           // Search and replace in existing file
           if (!fs.existsSync(filePath)) {
             console.error(`    ❌ File not found: ${change.file}`);
-            continue;
+            process.exit(1);
           }
 
           let content = fs.readFileSync(filePath, 'utf-8');
 
-          if (!change.search || !change.replace === undefined) {
+          if (!change.search || change.replace === undefined) {
             console.error(`    ❌ Edit requires search and replace fields`);
-            continue;
+            process.exit(1);
           }
 
+          console.log(`    Searching for: "${change.search.substring(0, 80).replace(/\n/g, '\\n')}${change.search.length > 80 ? '...' : ''}"`);
+
           if (!content.includes(change.search)) {
-            console.error(`    ❌ Search string not found in file`);
-            console.error(`    Search: ${change.search.substring(0, 100)}...`);
-            continue;
+            console.error(`    ❌ Search string not found in file!`);
+            console.error(`    This usually means the search string doesn't exactly match the file content.`);
+            console.error(`    Search string (${change.search.length} chars):`);
+            console.error(change.search);
+            process.exit(1);
           }
 
           // Count occurrences
@@ -350,7 +354,7 @@ Please implement the requested change by editing existing files.`;
 
           content = content.replace(change.search, change.replace);
           fs.writeFileSync(filePath, content);
-          console.log(`    ✓ Applied search/replace`);
+          console.log(`    ✓ Applied search/replace successfully`);
           break;
 
         case 'create':
