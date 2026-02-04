@@ -8,7 +8,6 @@
     "start": "next start"
   },
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.26.2",
     "@google/generative-ai": "^0.21.0",
     "@vercel/kv": "^2.0.0",
     "lucide-react": "^0.400.0",
