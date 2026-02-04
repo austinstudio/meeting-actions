@@ -59,12 +59,32 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+
+          # Debug: Show what files changed
+          echo "=== Git status before reset ==="
+          git status --short
+
           # Reset package files that may have been modified by npm install
           git checkout -- package.json package-lock.json 2>/dev/null || true
+
           # Remove status file from staging
           rm -f auto-implement-status.json
-          # Only add source files, not generated files
+
+          # Debug: Show what files changed after reset
+          echo "=== Git status after reset ==="
+          git status --short
+
+          # Debug: Show diff of changed files
+          echo "=== Git diff ==="
+          git diff --stat
+
+          # Add source files
           git add pages/ lib/ components/ styles/ scripts/ 2>/dev/null || true
+
+          # Debug: Show staged changes
+          echo "=== Staged changes ==="
+          git diff --staged --stat
+
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else

@@ -321,9 +321,19 @@ Please implement the requested change by editing existing files.`;
             console.warn(`    ⚠️ Search string found ${occurrences} times, replacing first occurrence`);
           }
 
-          content = content.replace(change.search, change.replace);
-          fs.writeFileSync(filePath, content);
+          const newContent = content.replace(change.search, change.replace);
+
+          // Debug: Check if content actually changed
+          if (newContent === content) {
+            console.error(`    ❌ Replace resulted in identical content!`);
+            console.error(`    Search: ${change.search.substring(0, 100)}`);
+            console.error(`    Replace: ${change.replace.substring(0, 100)}`);
+            process.exit(1);
+          }
+
+          fs.writeFileSync(filePath, newContent);
           console.log(`    ✓ Applied search/replace successfully`);
+          console.log(`    File size: ${content.length} -> ${newContent.length} bytes`);
           break;
 
         case 'create':
