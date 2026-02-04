@@ -15,46 +15,62 @@ const anthropic = new AnthropicBedrock({
   awsRegion: process.env.AWS_REGION || 'us-east-1',
 });
 
-// Files to include in context (adjust based on your project)
-const CONTEXT_FILES = [
-  'pages/index.js',
-  'pages/api/webhook.js',
-  'pages/api/tasks/index.js',
-  'pages/api/tasks/[id].js',
-  'pages/api/github/create-issue.js',
-  'pages/api/github/status.js',
-  'lib/auth.js',
-  'lib/features.js',
-  'package.json',
-  'CLAUDE.md',
-];
+// Get all JS files in a directory recursively
+function getJsFiles(dir, baseDir = dir) {
+  const files = [];
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      const relativePath = path.relative(baseDir, fullPath);
 
-// Maximum tokens for file content (to stay within context limits)
-const MAX_FILE_TOKENS = 50000;
+      // Skip node_modules, .next, .git
+      if (entry.name === 'node_modules' || entry.name === '.next' || entry.name === '.git') {
+        continue;
+      }
 
-function readFilesSafely(files) {
-  const contents = {};
-  let totalLength = 0;
+      if (entry.isDirectory()) {
+        files.push(...getJsFiles(fullPath, baseDir));
+      } else if (entry.name.endsWith('.js') || entry.name.endsWith('.json') || entry.name.endsWith('.md')) {
+        files.push(relativePath);
+      }
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+  return files;
+}
+
+// Read file with size limit
+function readFileSafely(filePath, maxChars = 100000) {
+  try {
+    const fullPath = path.join(process.cwd(), filePath);
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      if (content.length > maxChars) {
+        return content.substring(0, maxChars) + '\n\n... [FILE TRUNCATED - ' + (content.length - maxChars) + ' more characters]';
+      }
+      return content;
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+  return null;
+}
+
+// Search for relevant code patterns in files
+function searchInFiles(pattern, files) {
+  const matches = [];
+  const regex = new RegExp(pattern, 'gi');
 
   for (const file of files) {
-    const filePath = path.join(process.cwd(), file);
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      // Rough token estimate (4 chars per token)
-      if (totalLength + content.length / 4 < MAX_FILE_TOKENS) {
-        contents[file] = content;
-        totalLength += content.length / 4;
-      }
+    const content = readFileSafely(file, 200000);
+    if (content && regex.test(content)) {
+      matches.push(file);
     }
   }
 
-  return contents;
-}
-
-function formatFilesForPrompt(files) {
-  return Object.entries(files)
-    .map(([path, content]) => `### ${path}\n\`\`\`\n${content}\n\`\`\``)
-    .join('\n\n');
+  return matches;
 }
 
 async function main() {
@@ -70,37 +86,108 @@ async function main() {
   const isEnhancement = issueLabels.includes('enhancement');
   const isBug = issueLabels.includes('bug');
 
-  // Read context files
-  const files = readFilesSafely(CONTEXT_FILES);
-  const fileContext = formatFilesForPrompt(files);
+  // Get project structure
+  const allFiles = getJsFiles(process.cwd());
+  console.log(`Found ${allFiles.length} files in project`);
+
+  // Extract keywords from issue for smart file selection
+  const issueText = `${issueTitle} ${issueBody}`.toLowerCase();
+  const keywords = issueText.match(/\b\w{4,}\b/g) || [];
+
+  // Find files that might be relevant based on keywords
+  const relevantFiles = new Set(['pages/index.js', 'CLAUDE.md']); // Always include main file
+
+  for (const keyword of keywords) {
+    const matches = searchInFiles(keyword, allFiles.slice(0, 50)); // Limit search
+    matches.forEach(f => relevantFiles.add(f));
+  }
+
+  // Build file context - prioritize relevant files
+  const priorityFiles = [
+    'pages/index.js',  // Main app file - MUST include
+    'CLAUDE.md',       // Project instructions
+    'lib/features.js',
+  ];
+
+  let fileContext = '';
+  let totalChars = 0;
+  const maxTotalChars = 150000; // ~37k tokens
+  const includedFiles = [];
+
+  // First pass: priority files
+  for (const file of priorityFiles) {
+    if (totalChars >= maxTotalChars) break;
+    const content = readFileSafely(file, 80000);
+    if (content) {
+      fileContext += `### ${file}\n\`\`\`\n${content}\n\`\`\`\n\n`;
+      totalChars += content.length;
+      includedFiles.push(file);
+    }
+  }
+
+  // Second pass: other relevant files
+  for (const file of relevantFiles) {
+    if (totalChars >= maxTotalChars) break;
+    if (includedFiles.includes(file)) continue;
+    const content = readFileSafely(file, 30000);
+    if (content) {
+      fileContext += `### ${file}\n\`\`\`\n${content}\n\`\`\`\n\n`;
+      totalChars += content.length;
+      includedFiles.push(file);
+    }
+  }
+
+  console.log(`Including ${includedFiles.length} files in context: ${includedFiles.join(', ')}`);
+
+  // Also provide file listing for reference
+  const fileListStr = allFiles.join('\n');
 
   const systemPrompt = `You are an expert software engineer working on a Next.js application called "Meeting Actions".
 Your task is to implement changes based on GitHub issues.
 
-IMPORTANT RULES:
-1. Only make changes that are directly requested in the issue
-2. Keep changes minimal and focused
-3. Follow existing code patterns and styles in the codebase
-4. Do not add unnecessary features or refactoring
-5. Return your response as a JSON object with file changes
+## CRITICAL RULES - READ CAREFULLY:
 
-Your response MUST be a valid JSON object with this structure:
+1. **ALWAYS EDIT EXISTING FILES** - Do NOT create new files unless absolutely necessary. The codebase already has established patterns. Find where similar code exists and modify it there.
+
+2. **NEVER MODIFY package.json** - Do not add dependencies. Work with what's already installed.
+
+3. **FIND THE RIGHT LOCATION** - Before making changes, analyze where similar functionality exists in the codebase. For UI changes, look in pages/index.js which contains most components.
+
+4. **MINIMAL CHANGES** - Make the smallest possible change to implement the feature. Don't refactor, don't "improve" other code, don't add error handling that wasn't asked for.
+
+5. **MATCH EXISTING STYLE** - Copy the exact patterns, naming conventions, and styling classes used in the existing code.
+
+6. **SEARCH BEFORE CREATING** - If the issue mentions a feature (like "GitHub icon" or "user menu"), search the provided code to find where it already exists.
+
+## COMMON PATTERNS IN THIS CODEBASE:
+
+- UI components are in pages/index.js (it's a large single-file app)
+- Tooltips use the \`title\` attribute on elements
+- Icons come from lucide-react (already imported)
+- Tailwind CSS for styling
+- The user menu is in pages/index.js around the session/user avatar area
+
+## RESPONSE FORMAT:
+
+Return ONLY a valid JSON object:
 {
-  "analysis": "Brief explanation of what you're implementing",
+  "analysis": "Where I found the relevant code and what I'm changing",
   "changes": [
     {
-      "file": "path/to/file.js",
-      "action": "edit" | "create" | "delete",
-      "content": "full file content for create/edit, null for delete",
+      "file": "path/to/existing/file.js",
+      "action": "edit",
+      "content": "FULL file content with changes applied",
       "description": "what this change does"
     }
   ],
-  "summary": "One sentence summary of all changes"
+  "summary": "One sentence summary"
 }
 
-If you cannot implement the request (unclear requirements, needs human decision, etc.), return:
+For edits, you MUST return the COMPLETE file content, not just the changed parts.
+
+If you cannot implement (unclear requirements, would require creating new files when existing code should be edited, etc.):
 {
-  "analysis": "explanation of why",
+  "analysis": "explanation",
   "changes": [],
   "summary": "Could not auto-implement: reason"
 }`;
@@ -115,20 +202,33 @@ ${issueBody}
 
 ---
 
-## Current Codebase Context
+## Project File Structure
+\`\`\`
+${fileListStr}
+\`\`\`
+
+---
+
+## Source Code Context
 
 ${fileContext}
 
 ---
 
-Please implement the changes requested in this issue. Remember to return valid JSON only.`;
+IMPORTANT REMINDERS:
+- The user menu with GitHub icon is in pages/index.js - search for "Github" or "githubStatus" to find it
+- DO NOT create new component files - edit pages/index.js directly
+- DO NOT modify package.json
+- Use the \`title\` attribute for simple tooltips
+
+Please implement the requested change by editing existing files.`;
 
   console.log('Calling Claude API...');
 
   try {
     const response = await anthropic.messages.create({
       model: 'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
-      max_tokens: 8000,
+      max_tokens: 16000,
       messages: [
         {
           role: 'user',
@@ -162,6 +262,22 @@ Please implement the changes requested in this issue. Remember to return valid J
 
     if (!result.changes || result.changes.length === 0) {
       console.log('\n⚠️ No changes to apply');
+      process.exit(0);
+    }
+
+    // Validate changes - reject if trying to create new files when it shouldn't
+    for (const change of result.changes) {
+      if (change.action === 'create') {
+        console.warn(`⚠️ Warning: Attempting to create new file ${change.file}`);
+      }
+      if (change.file === 'package.json') {
+        console.error('❌ Rejecting change to package.json');
+        result.changes = result.changes.filter(c => c.file !== 'package.json');
+      }
+    }
+
+    if (result.changes.length === 0) {
+      console.log('\n⚠️ No valid changes to apply after filtering');
       process.exit(0);
     }
 
