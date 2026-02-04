@@ -2046,25 +2046,24 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
 
   useEffect(() => {
     if (task && isOpen) {
-      // Only reset tab and clear inputs when opening a different task
+      // Only reset form data when opening a different task
       const isNewTask = task.id !== currentTaskId;
 
-      setFormData({
-        task: task.task || '',
-        owner: task.owner || '',
-        person: task.person || '',
-        dueDate: task.dueDate || '',
-        priority: task.priority || 'medium',
-        type: task.type || 'action',
-        context: task.context || '',
-        status: task.status || 'todo',
-        tags: task.tags || [],
-        subtasks: task.subtasks || [],
-        githubIssueUrl: task.githubIssueUrl || null,
-        githubIssueNumber: task.githubIssueNumber || null
-      });
-
       if (isNewTask) {
+        setFormData({
+          task: task.task || '',
+          owner: task.owner || '',
+          person: task.person || '',
+          dueDate: task.dueDate || '',
+          priority: task.priority || 'medium',
+          type: task.type || 'action',
+          context: task.context || '',
+          status: task.status || 'todo',
+          tags: task.tags || [],
+          subtasks: task.subtasks || [],
+          githubIssueUrl: task.githubIssueUrl || null,
+          githubIssueNumber: task.githubIssueNumber || null
+        });
         setActiveTab('details');
         setNewComment('');
         setNewTag('');
