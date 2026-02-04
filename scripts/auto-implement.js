@@ -41,83 +41,17 @@ function getJsFiles(dir, baseDir = dir) {
   return files;
 }
 
-// Read file with size limit, optionally extracting sections around keywords
-function readFileSafely(filePath, maxChars = 100000, keywords = []) {
+// Read file fully - no truncation for source files
+function readFileSafely(filePath) {
   try {
     const fullPath = path.join(process.cwd(), filePath);
     if (fs.existsSync(fullPath)) {
-      const content = fs.readFileSync(fullPath, 'utf-8');
-
-      // If file is small enough, return it all
-      if (content.length <= maxChars) {
-        return content;
-      }
-
-      // For large files, extract relevant sections around keywords
-      if (keywords.length > 0) {
-        const sections = [];
-        const sectionSize = 3000; // chars before and after each match
-        const usedRanges = [];
-
-        for (const keyword of keywords) {
-          const regex = new RegExp(keyword, 'gi');
-          let match;
-          while ((match = regex.exec(content)) !== null) {
-            const start = Math.max(0, match.index - sectionSize);
-            const end = Math.min(content.length, match.index + keyword.length + sectionSize);
-
-            // Check if this overlaps with existing ranges
-            const overlaps = usedRanges.some(r => !(end < r.start || start > r.end));
-            if (!overlaps) {
-              usedRanges.push({ start, end });
-            }
-          }
-        }
-
-        // Sort and merge overlapping ranges
-        usedRanges.sort((a, b) => a.start - b.start);
-
-        // Extract sections
-        for (const range of usedRanges) {
-          const lineStart = content.lastIndexOf('\n', range.start) + 1;
-          const lineEnd = content.indexOf('\n', range.end);
-          const section = content.substring(lineStart, lineEnd > 0 ? lineEnd : range.end);
-          sections.push(`... [LINE ~${content.substring(0, lineStart).split('\n').length}] ...\n${section}`);
-        }
-
-        if (sections.length > 0) {
-          const result = sections.join('\n\n... [SECTION BREAK] ...\n\n');
-          if (result.length <= maxChars) {
-            return `[LARGE FILE - SHOWING RELEVANT SECTIONS]\n\n${result}\n\n... [END OF SECTIONS]`;
-          }
-        }
-      }
-
-      // Fallback: show start and end of file
-      const halfMax = Math.floor(maxChars / 2);
-      return content.substring(0, halfMax) +
-        '\n\n... [MIDDLE OF FILE TRUNCATED - ' + (content.length - maxChars) + ' chars] ...\n\n' +
-        content.substring(content.length - halfMax);
+      return fs.readFileSync(fullPath, 'utf-8');
     }
   } catch (e) {
     // Ignore errors
   }
   return null;
-}
-
-// Search for relevant code patterns in files
-function searchInFiles(pattern, files) {
-  const matches = [];
-  const regex = new RegExp(pattern, 'gi');
-
-  for (const file of files) {
-    const content = readFileSafely(file, 200000);
-    if (content && regex.test(content)) {
-      matches.push(file);
-    }
-  }
-
-  return matches;
 }
 
 async function main() {
@@ -138,55 +72,26 @@ async function main() {
   const allFiles = getJsFiles(process.cwd());
   console.log(`Found ${allFiles.length} files in project`);
 
-  // Extract keywords from issue for smart file selection
-  const issueText = `${issueTitle} ${issueBody}`.toLowerCase();
-  const keywords = issueText.match(/\b\w{4,}\b/g) || [];
-
-  // Find files that might be relevant based on keywords
-  const relevantFiles = new Set(['pages/index.js', 'CLAUDE.md']); // Always include main file
-
-  for (const keyword of keywords) {
-    const matches = searchInFiles(keyword, allFiles.slice(0, 50)); // Limit search
-    matches.forEach(f => relevantFiles.add(f));
-  }
-
-  // Build file context - prioritize relevant files
-  const priorityFiles = [
-    'pages/index.js',  // Main app file - MUST include
-    'CLAUDE.md',       // Project instructions
-    'lib/features.js',
-  ];
-
   let fileContext = '';
   let totalChars = 0;
-  const maxTotalChars = 150000; // ~37k tokens
   const includedFiles = [];
 
-  // Extract meaningful keywords from issue for section extraction
-  const meaningfulKeywords = ['github', 'tooltip', 'icon', 'menu', 'user', 'button', 'Github'];
-  const issueKeywords = keywords.filter(k =>
-    k.length > 3 && !['this', 'that', 'with', 'from', 'have', 'will', 'should'].includes(k.toLowerCase())
-  );
-  const searchKeywords = [...new Set([...meaningfulKeywords, ...issueKeywords.slice(0, 10)])];
+  // Files to skip (not useful for code changes)
+  const skipFiles = [
+    'package-lock.json',
+    'FEATURE_IDEAS.md',
+    'README.md',
+    '.env.local',
+    '.env',
+  ];
 
-  console.log(`Using keywords for section extraction: ${searchKeywords.join(', ')}`);
+  // Read ALL source files fully - Claude has 200k token context
+  for (const file of allFiles) {
+    // Skip non-essential files
+    if (skipFiles.some(skip => file.endsWith(skip))) continue;
+    if (file.includes('node_modules')) continue;
 
-  // First pass: priority files (with keyword extraction for large files)
-  for (const file of priorityFiles) {
-    if (totalChars >= maxTotalChars) break;
-    const content = readFileSafely(file, 100000, searchKeywords);
-    if (content) {
-      fileContext += `### ${file}\n\`\`\`\n${content}\n\`\`\`\n\n`;
-      totalChars += content.length;
-      includedFiles.push(file);
-    }
-  }
-
-  // Second pass: other relevant files
-  for (const file of relevantFiles) {
-    if (totalChars >= maxTotalChars) break;
-    if (includedFiles.includes(file)) continue;
-    const content = readFileSafely(file, 30000);
+    const content = readFileSafely(file);
     if (content) {
       fileContext += `### ${file}\n\`\`\`\n${content}\n\`\`\`\n\n`;
       totalChars += content.length;
@@ -299,7 +204,7 @@ Please implement the requested change by editing existing files.`;
   try {
     const response = await anthropic.messages.create({
       model: 'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
-      max_tokens: 16000,
+      max_tokens: 32000,
       messages: [
         {
           role: 'user',
