@@ -2043,6 +2043,42 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
   const [editingSubtaskText, setEditingSubtaskText] = useState('');
   const [currentTaskId, setCurrentTaskId] = useState(null);
   const [isCreatingIssue, setIsCreatingIssue] = useState(false);
+  const [issueStatus, setIssueStatus] = useState(null);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+
+  // Fetch GitHub issue status when issue exists
+  useEffect(() => {
+    if (!isOpen || !task?.githubIssueNumber) {
+      setIssueStatus(null);
+      return;
+    }
+
+    const fetchStatus = async () => {
+      setIsLoadingStatus(true);
+      try {
+        const response = await fetch(`/api/github/issue-status?issueNumber=${task.githubIssueNumber}`);
+        if (response.ok) {
+          const data = await response.json();
+          setIssueStatus(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch issue status:', error);
+      } finally {
+        setIsLoadingStatus(false);
+      }
+    };
+
+    fetchStatus();
+
+    // Poll every 10 seconds if status is pending or in-progress
+    const interval = setInterval(() => {
+      if (issueStatus?.status === 'pending' || issueStatus?.status === 'in-progress') {
+        fetchStatus();
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [isOpen, task?.githubIssueNumber, issueStatus?.status]);
 
   useEffect(() => {
     if (task && isOpen) {
@@ -2460,10 +2496,45 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                   </div>
 
                   {formData.githubIssueUrl ? (
-                    // Issue already exists
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 size={16} className="text-emerald-500" />
-                      <span className="text-sm text-slate-600 dark:text-neutral-400">Issue #{formData.githubIssueNumber}</span>
+                    // Issue exists - show status
+                    <div className="space-y-3">
+                      {/* Status indicator */}
+                      <div className="flex items-center gap-2">
+                        {isLoadingStatus ? (
+                          <RefreshCw size={16} className="text-slate-400 animate-spin" />
+                        ) : issueStatus?.status === 'success' ? (
+                          <CheckCircle2 size={16} className="text-emerald-500" />
+                        ) : issueStatus?.status === 'in-progress' || issueStatus?.status === 'pending' ? (
+                          <RefreshCw size={16} className="text-blue-500 animate-spin" />
+                        ) : issueStatus?.status === 'needs-approval' ? (
+                          <AlertTriangle size={16} className="text-amber-500" />
+                        ) : issueStatus?.status === 'failed' ? (
+                          <X size={16} className="text-rose-500" />
+                        ) : (
+                          <Github size={16} className="text-slate-400" />
+                        )}
+                        <span className="text-sm text-slate-600 dark:text-neutral-400">
+                          Issue #{formData.githubIssueNumber}
+                        </span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          issueStatus?.status === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' :
+                          issueStatus?.status === 'in-progress' || issueStatus?.status === 'pending' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400' :
+                          issueStatus?.status === 'needs-approval' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400' :
+                          issueStatus?.status === 'failed' ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400' :
+                          'bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-400'
+                        }`}>
+                          {issueStatus?.statusMessage || 'Checking...'}
+                        </span>
+                      </div>
+
+                      {/* Needs approval message */}
+                      {issueStatus?.status === 'needs-approval' && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 p-2 rounded">
+                          This change needs new dependencies. Add the <code className="bg-amber-100 dark:bg-amber-500/20 px-1 rounded">allow-deps</code> label on GitHub to proceed.
+                        </p>
+                      )}
+
+                      {/* View on GitHub link */}
                       <a
                         href={formData.githubIssueUrl}
                         target="_blank"
