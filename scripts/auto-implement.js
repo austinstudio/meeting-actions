@@ -199,10 +199,11 @@ IMPORTANT REMINDERS:
 
 Please implement the requested change by editing existing files.`;
 
-  console.log('Calling Claude API...');
+  console.log('Calling Claude API with streaming...');
 
   try {
-    const response = await anthropic.messages.create({
+    // Use streaming for large requests (required for >10 min operations)
+    const stream = await anthropic.messages.stream({
       model: 'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
       max_tokens: 32000,
       messages: [
@@ -214,8 +215,15 @@ Please implement the requested change by editing existing files.`;
       system: systemPrompt,
     });
 
-    const responseText = response.content[0].text;
-    console.log('Received response from Claude');
+    // Collect streamed response
+    let responseText = '';
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta?.text) {
+        responseText += event.delta.text;
+        process.stdout.write('.'); // Progress indicator
+      }
+    }
+    console.log('\nReceived response from Claude');
 
     // Parse JSON response
     let result;
