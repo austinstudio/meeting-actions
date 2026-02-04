@@ -208,7 +208,7 @@ Please implement the requested change by editing existing files.`;
     let responseText = '';
 
     const stream = anthropic.messages.stream({
-      model: 'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      model: 'us.anthropic.claude-opus-4-20250514-v1:0',
       max_tokens: 32000,
       messages: [
         {
