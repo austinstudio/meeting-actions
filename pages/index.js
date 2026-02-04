@@ -3177,7 +3177,7 @@ function FilterDropdown({ label, icon: Icon, options, value, onChange, multiple 
         {Icon && <Icon size={14} />}
         {label}
         {badge && <span className="text-xs opacity-70">({badge})</span>}
-        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''} ml-1`} />
       </button>
 
       {isOpen && (
