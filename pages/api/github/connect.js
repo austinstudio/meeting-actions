@@ -17,9 +17,10 @@ export default async function handler(req, res) {
   }
 
   // Build GitHub OAuth URL
+  const baseUrl = process.env.NEXTAUTH_URL.replace(/\/$/, ''); // Remove trailing slash
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: `${process.env.NEXTAUTH_URL}/api/github/callback`,
+    redirect_uri: `${baseUrl}/api/github/callback`,
     scope: 'repo',
     state: userId, // Pass userId in state to associate on callback
   });
