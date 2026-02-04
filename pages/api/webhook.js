@@ -177,6 +177,13 @@ An action item MUST have ALL of these characteristics:
 - FOLLOW-UP: Requires contacting or waiting on a specific person ("check with Sarah", "waiting for John's response", "need approval from manager")
 - ACTION: Task you can complete independently ("review document", "write proposal", "update spreadsheet")
 
+## Task Types (IMPORTANT):
+You may ONLY use these two types in your output:
+- "action" - for tasks that can be completed independently
+- "follow-up" - for tasks requiring contact with another person
+
+DO NOT use "enhancement" or "bug" as types - these are reserved for manual entry only and should never be auto-extracted.
+
 Analyze the content and return ONLY valid JSON in this exact format:
 
 {

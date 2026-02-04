@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ChevronLeft, ListChecks, Rows3, Rows4, LayoutList, GripVertical, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, Smartphone, Gift, Bot } from 'lucide-react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ChevronLeft, ListChecks, Rows3, Rows4, LayoutList, GripVertical, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, Smartphone, Gift, Bot, Github, ExternalLink, Link } from 'lucide-react';
 import { APP_VERSION, FEATURES, getNewFeatures, getAllFeatures } from '../lib/features';
 
 const DEFAULT_COLUMNS = [
@@ -877,7 +877,8 @@ const FEATURE_ICONS = {
   History: History,
   Gift: Gift,
   Users: Users,
-  Bot: Bot
+  Bot: Bot,
+  Github: Github
 };
 
 function WhatsNewModal({ isOpen, onClose, features, showAll = false }) {
@@ -2017,7 +2018,7 @@ function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmLabe
   );
 }
 
-function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment }) {
+function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, githubStatus, onRefreshGithubStatus }) {
   const [formData, setFormData] = useState({
     task: '',
     owner: '',
@@ -2028,7 +2029,9 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
     context: '',
     status: 'todo',
     tags: [],
-    subtasks: []
+    subtasks: [],
+    githubIssueUrl: null,
+    githubIssueNumber: null
   });
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
@@ -2039,6 +2042,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
   const [editingSubtaskId, setEditingSubtaskId] = useState(null);
   const [editingSubtaskText, setEditingSubtaskText] = useState('');
   const [currentTaskId, setCurrentTaskId] = useState(null);
+  const [isCreatingIssue, setIsCreatingIssue] = useState(false);
 
   useEffect(() => {
     if (task && isOpen) {
@@ -2055,7 +2059,9 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
         context: task.context || '',
         status: task.status || 'todo',
         tags: task.tags || [],
-        subtasks: task.subtasks || []
+        subtasks: task.subtasks || [],
+        githubIssueUrl: task.githubIssueUrl || null,
+        githubIssueNumber: task.githubIssueNumber || null
       });
 
       if (isNewTask) {
@@ -2367,6 +2373,8 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                   >
                     <option value="action">Action</option>
                     <option value="follow-up">Follow-up</option>
+                    <option value="enhancement">Enhancement</option>
+                    <option value="bug">Bug</option>
                   </select>
                 </div>
                 {formData.type === 'follow-up' && (
@@ -2443,6 +2451,109 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment })
                   className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none dark:bg-neutral-950 dark:text-white"
                 />
               </div>
+
+              {/* GitHub Integration - only show for enhancement/bug types */}
+              {(formData.type === 'enhancement' || formData.type === 'bug') && (
+                <div className="border border-slate-200 dark:border-neutral-700 rounded-lg p-4 bg-slate-50 dark:bg-neutral-900/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Github size={18} className="text-slate-600 dark:text-neutral-400" />
+                    <span className="font-medium text-slate-700 dark:text-neutral-300">GitHub Integration</span>
+                  </div>
+
+                  {formData.githubIssueUrl ? (
+                    // Issue already exists
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-emerald-500" />
+                      <span className="text-sm text-slate-600 dark:text-neutral-400">Issue #{formData.githubIssueNumber}</span>
+                      <a
+                        href={formData.githubIssueUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-200 dark:bg-neutral-800 text-slate-700 dark:text-neutral-300 rounded-lg hover:bg-slate-300 dark:hover:bg-neutral-700 transition-colors"
+                      >
+                        View on GitHub
+                        <ExternalLink size={14} />
+                      </a>
+                    </div>
+                  ) : githubStatus?.connected ? (
+                    // Connected but no issue yet
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-neutral-500 mb-2">
+                        Connected as <span className="font-medium text-slate-700 dark:text-neutral-300">@{githubStatus.username}</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setIsCreatingIssue(true);
+                          try {
+                            const response = await fetch('/api/github/create-issue', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                task: formData.task,
+                                owner: formData.owner,
+                                dueDate: formData.dueDate,
+                                priority: formData.priority,
+                                type: formData.type,
+                                context: formData.context,
+                              }),
+                            });
+                            const data = await response.json();
+                            if (data.success) {
+                              setFormData({
+                                ...formData,
+                                githubIssueUrl: data.issueUrl,
+                                githubIssueNumber: data.issueNumber,
+                              });
+                              // Save immediately with GitHub issue data
+                              await onSave(task.id, {
+                                ...formData,
+                                githubIssueUrl: data.issueUrl,
+                                githubIssueNumber: data.issueNumber,
+                              });
+                            } else {
+                              alert('Failed to create issue: ' + (data.error || 'Unknown error'));
+                            }
+                          } catch (error) {
+                            console.error('Create issue error:', error);
+                            alert('Failed to create issue');
+                          } finally {
+                            setIsCreatingIssue(false);
+                          }
+                        }}
+                        disabled={isCreatingIssue || !formData.task.trim()}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 dark:bg-neutral-700 text-white rounded-lg hover:bg-slate-700 dark:hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isCreatingIssue ? (
+                          <>
+                            <RefreshCw size={16} className="animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Github size={16} />
+                            Create GitHub Issue
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    // Not connected
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-neutral-500 mb-3">
+                        Connect your GitHub account to create issues directly.
+                      </p>
+                      <a
+                        href="/api/github/connect"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 dark:bg-neutral-700 text-white rounded-lg hover:bg-slate-700 dark:hover:bg-neutral-600 transition-colors"
+                      >
+                        <Link size={16} />
+                        Connect GitHub
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Buttons */}
               <div className="flex justify-between pt-2">
@@ -3273,6 +3384,42 @@ export default function MeetingKanban() {
   const [newFeatures, setNewFeatures] = useState([]); // Features to display in What's New
   const [showAllFeatures, setShowAllFeatures] = useState(false); // Show all features vs just new
   const [showAskAI, setShowAskAI] = useState(false); // AI Assistant modal
+  const [githubStatus, setGithubStatus] = useState(null); // GitHub connection status
+
+  // Fetch GitHub connection status
+  const fetchGithubStatus = async () => {
+    try {
+      const response = await fetch('/api/github/status');
+      if (response.ok) {
+        const data = await response.json();
+        setGithubStatus(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch GitHub status:', error);
+    }
+  };
+
+  // Check for GitHub connection result from OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('github_connected') === 'true') {
+      fetchGithubStatus();
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    if (params.get('github_error')) {
+      console.error('GitHub connection error:', params.get('github_error'));
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  // Fetch GitHub status on mount
+  useEffect(() => {
+    if (session) {
+      fetchGithubStatus();
+    }
+  }, [session]);
 
   // Initialize theme from localStorage and system preference
   useEffect(() => {
@@ -4656,6 +4803,8 @@ export default function MeetingKanban() {
         onClose={() => setEditingTask(null)}
         onSave={handleEditTask}
         onAddComment={handleAddComment}
+        githubStatus={githubStatus}
+        onRefreshGithubStatus={fetchGithubStatus}
       />
 
       <EditMeetingModal
