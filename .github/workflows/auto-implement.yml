@@ -126,22 +126,26 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const clarification = `${{ steps.status.outputs.clarification_needed }}`;
-            const analysis = `${{ steps.status.outputs.analysis }}`;
+            const clarification = process.env.CLARIFICATION_NEEDED || 'More details needed';
+            const analysis = process.env.ANALYSIS || 'Unable to determine';
+            const body = [
+              '🤔 I need more information to implement this correctly.',
+              '',
+              'What I understood: ' + analysis,
+              '',
+              'What I need to know: ' + clarification,
+              '',
+              'Please update the issue description with more details, or reply to this comment with the information needed. Then comment `/retry` to try again.'
+            ].join('\n');
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `🤔 **I need more information to implement this correctly.**
-
-**What I understood:** ${analysis}
-
-**What I need to know:** ${clarification}
-
-Please update the issue description with more details, or reply to this comment with the information needed. Then comment \`/retry\` to try again.
-
-_The auto-implement bot prefers to ask for clarification rather than implement something incorrectly._`
+              body: body
             })
+        env:
+          CLARIFICATION_NEEDED: ${{ steps.status.outputs.clarification_needed }}
+          ANALYSIS: ${{ steps.status.outputs.analysis }}
 
       - name: Comment - needs dependencies label
         if: steps.status.outputs.needs_deps == 'true'
