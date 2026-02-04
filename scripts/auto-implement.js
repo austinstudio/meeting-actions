@@ -203,7 +203,9 @@ Please implement the requested change by editing existing files.`;
 
   try {
     // Use streaming for large requests (required for >10 min operations)
-    const stream = await anthropic.messages.stream({
+    let responseText = '';
+
+    const stream = anthropic.messages.stream({
       model: 'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
       max_tokens: 32000,
       messages: [
@@ -215,14 +217,12 @@ Please implement the requested change by editing existing files.`;
       system: systemPrompt,
     });
 
-    // Collect streamed response
-    let responseText = '';
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta?.text) {
-        responseText += event.delta.text;
-        process.stdout.write('.'); // Progress indicator
-      }
-    }
+    stream.on('text', (text) => {
+      responseText += text;
+      process.stdout.write('.');
+    });
+
+    await stream.finalMessage();
     console.log('\nReceived response from Claude');
 
     // Parse JSON response
