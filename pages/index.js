@@ -2404,7 +2404,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                   <select
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                    className="w-full pl-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                   >
                     <option value="action">Action</option>
                     <option value="follow-up">Follow-up</option>
@@ -2422,7 +2422,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                       value={formData.person}
                       onChange={(e) => setFormData({ ...formData, person: e.target.value })}
                       placeholder="Person name"
-                      className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                      className="w-full pl-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                     />
                   </div>
                 )}
@@ -2438,7 +2438,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                     type="date"
                     value={formData.dueDate}
                     onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                    className="w-full pl-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                   />
                 </div>
                 <div>
@@ -2448,7 +2448,7 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
                   <select
                     value={formData.priority}
                     onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
+                    className="w-full pl-3 pr-8 py-2 border border-slate-300 dark:border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-neutral-950 dark:text-white"
                   >
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
