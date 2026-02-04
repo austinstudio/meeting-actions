@@ -68,51 +68,60 @@ async function streamMessage(messages, system, useThinking = true) {
     model: MODEL,
     max_tokens: 16000,
     messages,
+    system,
   };
 
+  // Try to enable extended thinking if supported
   // Extended thinking makes Claude reason through problems deeply
-  // This is the key difference that makes Claude Code "smarter"
   if (useThinking) {
-    options.thinking = {
-      type: 'enabled',
-      budget_tokens: 10000,  // Allow up to 10k tokens for reasoning
-    };
-    // When using thinking, system prompt goes in user message
-    if (system) {
-      options.messages = [
-        { role: 'user', content: `${system}\n\n---\n\n${messages[0].content}` },
-        ...messages.slice(1)
-      ];
+    try {
+      options.thinking = {
+        type: 'enabled',
+        budget_tokens: 10000,
+      };
+    } catch (e) {
+      console.log('Extended thinking not available, continuing without it');
     }
-  } else {
-    options.system = system;
   }
 
   const stream = anthropic.messages.stream(options);
 
-  stream.on('contentBlockStart', (block) => {
-    if (block.content_block?.type === 'thinking') {
-      process.stdout.write('\n💭 Thinking');
+  // Capture all text from the stream
+  stream.on('text', (text) => {
+    responseText += text;
+    process.stdout.write('.');
+  });
+
+  // Also try to capture thinking if available
+  stream.on('contentBlockDelta', (event) => {
+    if (event.delta?.type === 'thinking_delta') {
+      thinkingText += event.delta.thinking || '';
     }
   });
 
-  stream.on('contentBlockDelta', (delta) => {
-    if (delta.delta?.type === 'thinking_delta') {
-      thinkingText += delta.delta.thinking || '';
-      process.stdout.write('.');
-    } else if (delta.delta?.type === 'text_delta') {
-      responseText += delta.delta.text || '';
-      process.stdout.write('.');
-    }
-  });
-
-  await stream.finalMessage();
+  const finalMessage = await stream.finalMessage();
   console.log('');
+
+  // If streaming didn't capture text, extract from final message
+  if (!responseText && finalMessage.content) {
+    for (const block of finalMessage.content) {
+      if (block.type === 'text') {
+        responseText += block.text;
+      } else if (block.type === 'thinking') {
+        thinkingText += block.thinking || '';
+      }
+    }
+  }
 
   if (thinkingText) {
     console.log('\n💭 Claude\'s reasoning (summary):');
-    // Show first 500 chars of thinking to help debug
     console.log(thinkingText.substring(0, 500) + (thinkingText.length > 500 ? '...' : ''));
+  }
+
+  // Debug: show response length
+  console.log(`Response length: ${responseText.length} chars`);
+  if (responseText.length < 50) {
+    console.log('Raw response:', responseText);
   }
 
   return responseText;
