@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
-import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ChevronLeft, ListChecks, Rows3, Rows4, LayoutList, GripVertical, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, Smartphone, Gift, Bot, Github, ExternalLink, Link, Unlink } from 'lucide-react';
+import { Calendar, User, Clock, CheckCircle2, ArrowRight, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, MoreVertical, Settings, ChevronDown, Pencil, Search, Sparkles, Bell, Upload, File, MessageSquare, History, Send, AtSign, RotateCcw, AlertTriangle, Pin, Sun, Moon, Monitor, Tag, ChevronRight, ChevronLeft, ListChecks, Rows3, Rows4, LayoutList, GripVertical, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, Smartphone, Gift, Bot, Github, ExternalLink, Link, Unlink, ArrowUpDown } from 'lucide-react';
 import { APP_VERSION, FEATURES, getNewFeatures, getAllFeatures } from '../lib/features';
 
 const DEFAULT_COLUMNS = [
@@ -324,7 +324,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
   );
 }
 
-function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete, onPinTask, viewDensity }) {
+function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete, onPinTask, viewDensity, onSortColumn }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isColumnDragOver, setIsColumnDragOver] = useState(false);
   const [dropIndex, setDropIndex] = useState(null);
@@ -397,6 +397,16 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-slate-700 dark:text-slate-200 text-sm">{column.label}</h3>
           <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSortColumn(column.id);
+              }}
+              className="p-1 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-neutral-800/50 rounded transition-colors"
+              title="Sort tasks in this column"
+            >
+              <ArrowUpDown size={16} />
+            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -4148,6 +4158,59 @@ export default function MeetingKanban() {
     }
   };
 
+  const handleSortColumn = async (columnId) => {
+    // Get all non-deleted tasks in this column
+    const columnTasks = tasks.filter(t => t.status === columnId && !t.deleted && !t.archived);
+    
+    if (columnTasks.length === 0) return;
+
+    // Sort tasks by: 1) pinned, 2) priority (high > medium > low), 3) due date (earliest first)
+    const priorityMap = { high: 0, medium: 1, low: 2 };
+    
+    const sortedTasks = [...columnTasks].sort((a, b) => {
+      // Pinned tasks first
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      
+      // Then by priority
+      const priorityA = priorityMap[a.priority] ?? 1;
+      const priorityB = priorityMap[b.priority] ?? 1;
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      
+      // Then by due date (earliest first, tasks without dates go to end)
+      const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+      const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+      return dateA - dateB;
+    });
+
+    // Calculate new order values
+    const updates = sortedTasks.map((task, index) => ({
+      id: task.id,
+      order: index
+    }));
+
+    // Optimistic update
+    setTasks(prev => prev.map(t => {
+      const update = updates.find(u => u.id === t.id);
+      if (update) {
+        return { ...t, order: update.order };
+      }
+      return t;
+    }));
+
+    try {
+      // Bulk update order
+      await fetch('/api/tasks/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reorder', updates })
+      });
+    } catch (err) {
+      console.error('Failed to reorder tasks:', err);
+      fetchData(); // Refresh on error
+    }
+  };
+
   const handleDeleteColumn = async (columnId) => {
     const column = columns.find(c => c.id === columnId);
     setConfirmModal({
@@ -4856,6 +4919,7 @@ export default function MeetingKanban() {
                   onPermanentDelete={handlePermanentDelete}
                   onPinTask={handlePinTask}
                   viewDensity={viewDensity}
+                  onSortColumn={handleSortColumn}
                 />
                 {/* Delete column button for custom columns */}
                 {column.custom && (
