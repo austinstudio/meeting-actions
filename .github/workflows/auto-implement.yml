@@ -188,3 +188,35 @@ jobs:
               issue_number: context.issue.number,
               body: '❌ Auto-implementation failed. Please check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.'
             })
+
+      - name: SMS notification - success
+        if: success() && steps.status.outputs.needs_deps != 'true' && steps.status.outputs.needs_clarification != 'true'
+        run: |
+          curl -s -X POST "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json" \
+            -u "${TWILIO_SID}:${TWILIO_AUTH_TOKEN}" \
+            --data-urlencode "From=${TWILIO_FROM}" \
+            --data-urlencode "To=${TWILIO_TO}" \
+            --data-urlencode "Body=✅ Auto-implement done: ${ISSUE_TITLE} (#${ISSUE_NUMBER}). Vercel will deploy shortly."
+        env:
+          TWILIO_SID: ${{ secrets.TWILIO_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM: ${{ secrets.TWILIO_FROM_NUMBER }}
+          TWILIO_TO: ${{ secrets.TWILIO_TO_NUMBER }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+      - name: SMS notification - failure
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json" \
+            -u "${TWILIO_SID}:${TWILIO_AUTH_TOKEN}" \
+            --data-urlencode "From=${TWILIO_FROM}" \
+            --data-urlencode "To=${TWILIO_TO}" \
+            --data-urlencode "Body=❌ Auto-implement FAILED: ${ISSUE_TITLE} (#${ISSUE_NUMBER}). Check GitHub Actions for details."
+        env:
+          TWILIO_SID: ${{ secrets.TWILIO_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM: ${{ secrets.TWILIO_FROM_NUMBER }}
+          TWILIO_TO: ${{ secrets.TWILIO_TO_NUMBER }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
