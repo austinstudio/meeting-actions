@@ -166,7 +166,15 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
       draggable={!isTrashView}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className={`rounded-lg border border-slate-200 dark:border-neutral-800 ${density.padding} ${isTrashView ? 'cursor-default opacity-75' : 'cursor-grab active:cursor-grabbing'} shadow-sm hover:shadow-md transition-all relative group/card ${isDragging ? 'opacity-50 rotate-2' : ''} ${task.pinned ? 'bg-orange-50 dark:bg-[rgb(40_20_0/77%)]' : 'bg-white dark:bg-neutral-900'}`}
+      onDoubleClick={() => !isTrashView && onEdit(task)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !isTrashView) {
+          e.preventDefault();
+          onEdit(task);
+        }
+      }}
+      tabIndex={isTrashView ? -1 : 0}
+      className={`rounded-lg border border-slate-200 dark:border-neutral-800 ${density.padding} ${isTrashView ? 'cursor-default opacity-75' : 'cursor-grab active:cursor-grabbing'} shadow-sm hover:shadow-md transition-all relative group/card ${isDragging ? 'opacity-50 rotate-2' : ''} ${task.pinned ? 'bg-orange-50 dark:bg-[rgb(40_20_0/77%)]' : 'bg-white dark:bg-neutral-900'} focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-orange-500`}
     >
       {/* Pin indicator */}
       {task.pinned && (
