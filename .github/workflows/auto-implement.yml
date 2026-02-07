@@ -189,34 +189,27 @@ jobs:
               body: '❌ Auto-implementation failed. Please check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.'
             })
 
-      - name: SMS notification - success
+      - name: Push notification - success
         if: success() && steps.status.outputs.needs_deps != 'true' && steps.status.outputs.needs_clarification != 'true'
         run: |
-          curl -s -X POST "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json" \
-            -u "${TWILIO_SID}:${TWILIO_AUTH_TOKEN}" \
-            --data-urlencode "From=${TWILIO_FROM}" \
-            --data-urlencode "To=${TWILIO_TO}" \
-            --data-urlencode "Body=✅ Auto-implement done: ${ISSUE_TITLE} (#${ISSUE_NUMBER}). Vercel will deploy shortly."
+          curl -s \
+            -H "Title: Auto-implement done" \
+            -H "Tags: white_check_mark" \
+            -d "Done: ${ISSUE_TITLE} (#${ISSUE_NUMBER}). Vercel will deploy shortly." \
+            ntfy.sh/${{ secrets.NTFY_TOPIC }}
         env:
-          TWILIO_SID: ${{ secrets.TWILIO_SID }}
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          TWILIO_FROM: ${{ secrets.TWILIO_FROM_NUMBER }}
-          TWILIO_TO: ${{ secrets.TWILIO_TO_NUMBER }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
 
-      - name: SMS notification - failure
+      - name: Push notification - failure
         if: failure()
         run: |
-          curl -s -X POST "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json" \
-            -u "${TWILIO_SID}:${TWILIO_AUTH_TOKEN}" \
-            --data-urlencode "From=${TWILIO_FROM}" \
-            --data-urlencode "To=${TWILIO_TO}" \
-            --data-urlencode "Body=❌ Auto-implement FAILED: ${ISSUE_TITLE} (#${ISSUE_NUMBER}). Check GitHub Actions for details."
+          curl -s \
+            -H "Title: Auto-implement failed" \
+            -H "Tags: x" \
+            -H "Priority: high" \
+            -d "Failed: ${ISSUE_TITLE} (#${ISSUE_NUMBER}). Check GitHub Actions for details." \
+            ntfy.sh/${{ secrets.NTFY_TOPIC }}
         env:
-          TWILIO_SID: ${{ secrets.TWILIO_SID }}
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          TWILIO_FROM: ${{ secrets.TWILIO_FROM_NUMBER }}
-          TWILIO_TO: ${{ secrets.TWILIO_TO_NUMBER }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
