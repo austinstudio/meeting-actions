@@ -14,6 +14,7 @@ import PasteModal from '../components/meeting/PasteModal';
 import EditTaskModal from '../components/task/EditTaskModal';
 import AddTaskModal from '../components/task/AddTaskModal';
 import AskAIModal from '../components/ai/AskAIModal';
+import SmartSuggestionsBar from '../components/ai/SmartSuggestionsBar';
 import WhatsNewModal from '../components/ui/WhatsNewModal';
 import ConfirmModal from '../components/ui/ConfirmModal';
 import AddColumnModal from '../components/ui/AddColumnModal';
@@ -1129,7 +1130,7 @@ export default function MeetingKanban() {
         </div>
       </header>
 
-      <div className="flex pb-5">
+      <div className="flex pb-20">
         {/* Mobile sidebar backdrop */}
         {mobileMenuOpen && (
           <div
@@ -1640,6 +1641,14 @@ export default function MeetingKanban() {
         onEditTask={(task) => setEditingTask(task)}
         tasks={tasks}
         meetings={meetings}
+      />
+
+      {/* Floating AI Suggestions Bar */}
+      <SmartSuggestionsBar
+        tasks={tasks}
+        meetings={meetings}
+        loading={loading}
+        onEditTask={(task) => setEditingTask(task)}
       />
     </div>
   );
