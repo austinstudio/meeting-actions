@@ -2,16 +2,17 @@
 
 ## High Impact, Medium Complexity
 
-### 1. Search & Quick Find
+<!-- ### 1. Search & Quick Find
 Complete - Global search across tasks and meetings
 - Filter by date range, priority, keywords
-- Search within meeting transcripts
+- Search within meeting transcripts -->
 
 ### 2. Due Date Intelligence
 - Visual calendar view of upcoming tasks
-- Smart reminders (browser notifications for overdue/due soon)
+- Smart reminders (browser notifications for overdue/due soon) ----- USE TEXT?
 - "This week", "Next week", "Overdue" quick filters
-- Recurring tasks (weekly 1:1s, monthly reviews)
+- Recurring tasks (weekly 1:1s, monthly reviews). ------ Might be good
+- Daily overdue digest via ntfy + Vercel Cron  ------ USE TEXT?
 
 ### 3. Task Dependencies
 - Link tasks that block each other
@@ -135,3 +136,12 @@ COMPLETE - Collapse/expand subtasks
 3. **Smart Due Date Reminders** - Ensures nothing falls through cracks
 4. **Bulk Operations** - Saves time managing multiple tasks
 5. **Tags/Labels** - Adds flexible organization without rigid structure
+
+
+PHONE INTERACTION....
+
+1. Daily overdue digest via ntfy + Vercel Cron — low effort since the ntfy infra is already wired up                               
+  2. Export to CSV — quick win for getting data out
+  3. Silent data limit warning — so you don't lose meetings without knowing                                                          
+  4. Breaking up index.js — would make your auto-implement bot more reliable since it would be editing smaller, focused files instead
+   of a 4800-line monolith
