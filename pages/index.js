@@ -2984,15 +2984,16 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave, currentUser 
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (isOpen && columnId) {
+    if (isOpen) {
       setFormData(prev => ({
         ...prev,
         task: '',
         context: '',
-        status: columnId
+        owner: currentUser || 'User',
+        status: columnId || prev.status
       }));
     }
-  }, [isOpen, columnId]);
+  }, [isOpen, columnId, currentUser]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -24,7 +24,7 @@ export const authOptions = {
 
 				return {
 					id: profile.sub,
-					name: profile.name,
+					name: profile.name || userInfo.name || profile.email?.split('@')[0],
 					email: profile.email,
 					image: userInfo.picture,
 				};
