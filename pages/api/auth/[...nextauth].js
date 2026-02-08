@@ -41,16 +41,22 @@ export const authOptions = {
 			return false;
 		},
 		async jwt({ token, user }) {
-			// On initial sign in, capture picture from user
+			// On initial sign in, capture name and picture from user
 			if (user?.image) {
 				token.picture = user.image;
+			}
+			if (user?.name) {
+				token.name = user.name;
 			}
 			return token;
 		},
 		async session({ session, token }) {
-			// Pass user id and picture to session
+			// Pass user id, name, and picture to session
 			if (token?.sub) {
 				session.user.id = token.sub;
+			}
+			if (token?.name) {
+				session.user.name = token.name;
 			}
 			if (token?.picture) {
 				session.user.image = token.picture;
