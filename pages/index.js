@@ -127,15 +127,14 @@ function DueDateBadge({ dueDate, status }) {
   );
 }
 
-// Current user configuration
-const CURRENT_USER = 'Corey';
-const isCurrentUser = (name) => {
-  if (!name) return false;
+// Check if a task owner matches the current user
+const isCurrentUser = (name, currentUser) => {
+  if (!name || !currentUser) return false;
   const normalized = name.toLowerCase().trim();
-  return normalized === 'me' || normalized === 'corey';
+  return normalized === 'me' || normalized === currentUser.toLowerCase();
 };
 
-function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onPermanentDelete, onPin, viewDensity = 'normal' }) {
+function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onPermanentDelete, onPin, viewDensity = 'normal', currentUser }) {
   const [isDragging, setIsDragging] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [expandContext, setExpandContext] = useState(false);
@@ -309,7 +308,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
       {/* Owner / Assigned to */}
       <div className="flex items-center gap-1.5 mb-2">
         <User size={12} className="text-slate-400 dark:text-neutral-500" />
-        <span className={`text-xs ${isCurrentUser(task.owner) ? 'text-indigo-600 dark:text-orange-500 font-medium' : 'text-slate-500 dark:text-neutral-400'}`}>
+        <span className={`text-xs ${isCurrentUser(task.owner, currentUser) ? 'text-indigo-600 dark:text-orange-500 font-medium' : 'text-slate-500 dark:text-neutral-400'}`}>
           {task.owner || 'Unassigned'}
         </span>
         {task.person && task.type === 'follow-up' && (
@@ -332,7 +331,7 @@ function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onP
   );
 }
 
-function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete, onPinTask, viewDensity, onSortColumn }) {
+function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete, onPinTask, viewDensity, onSortColumn, currentUser }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isColumnDragOver, setIsColumnDragOver] = useState(false);
   const [dropIndex, setDropIndex] = useState(null);
@@ -464,6 +463,7 @@ function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onA
               onPermanentDelete={onPermanentDelete}
               onPin={onPinTask}
               viewDensity={viewDensity}
+              currentUser={currentUser}
             />
           </div>
         ))}
@@ -2970,10 +2970,10 @@ function EditTaskModal({ isOpen, task, onClose, onSave, columns, onAddComment, g
   );
 }
 
-function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
+function AddTaskModal({ isOpen, columnId, columns, onClose, onSave, currentUser }) {
   const [formData, setFormData] = useState({
     task: '',
-    owner: CURRENT_USER,
+    owner: currentUser || 'User',
     person: '',
     dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     priority: 'medium',
@@ -3001,7 +3001,7 @@ function AddTaskModal({ isOpen, columnId, columns, onClose, onSave }) {
     setIsSaving(false);
     setFormData({
       task: '',
-      owner: CURRENT_USER,
+      owner: currentUser || 'User',
       person: '',
       dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       priority: 'medium',
@@ -3434,6 +3434,7 @@ function SearchInput({ value, onChange, resultCount }) {
 
 export default function MeetingKanban() {
   const { data: session } = useSession();
+  const currentUser = session?.user?.name?.split(' ')[0] || 'User';
   const [tasks, setTasks] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [columns, setColumns] = useState(DEFAULT_COLUMNS);
@@ -4011,7 +4012,7 @@ export default function MeetingKanban() {
       const response = await fetch(`/api/tasks/${taskId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comment, user: CURRENT_USER })
+        body: JSON.stringify({ comment, user: currentUser })
       });
 
       const data = await response.json();
@@ -4266,7 +4267,7 @@ export default function MeetingKanban() {
     if (selectedMeeting && t.meetingId !== selectedMeeting) return false;
 
     // Type/owner filters
-    if (view === 'mine' && !isCurrentUser(t.owner)) return false;
+    if (view === 'mine' && !isCurrentUser(t.owner, currentUser)) return false;
     if (view === 'follow-ups' && t.type !== 'follow-up') return false;
     if (view === 'actions' && t.type !== 'action') return false;
 
@@ -4330,7 +4331,7 @@ export default function MeetingKanban() {
 
   const stats = {
     total: tasks.filter(t => !t.archived && !t.deleted).length,
-    mine: tasks.filter(t => isCurrentUser(t.owner) && !t.archived && !t.deleted).length,
+    mine: tasks.filter(t => isCurrentUser(t.owner, currentUser) && !t.archived && !t.deleted).length,
     overdue: tasks.filter(t => new Date(t.dueDate) < new Date() && t.status !== 'done' && !t.archived && !t.deleted).length,
     archived: tasks.filter(t => t.archived && !t.deleted).length,
     trash: tasks.filter(t => t.deleted).length,
@@ -4928,6 +4929,7 @@ export default function MeetingKanban() {
                   onPinTask={handlePinTask}
                   viewDensity={viewDensity}
                   onSortColumn={handleSortColumn}
+                  currentUser={currentUser}
                 />
                 {/* Delete column button for custom columns */}
                 {column.custom && (
@@ -5017,6 +5019,7 @@ export default function MeetingKanban() {
         columns={columns}
         onClose={() => setAddingToColumn(null)}
         onSave={handleAddTask}
+        currentUser={currentUser}
       />
 
       {/* Mobile Filter Sheet */}

@@ -3,10 +3,10 @@
 // Includes comments and activity logging
 
 import { kv } from '@vercel/kv';
-import { requireAuth } from '../../../lib/auth';
+import { requireAuth, getUserName } from '../../../lib/auth';
 
 // Helper to generate activity log entry
-function createActivityEntry(type, field, oldValue, newValue, user = 'Corey') {
+function createActivityEntry(type, field, oldValue, newValue, user = 'Unknown') {
   return {
     id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     type, // 'update', 'comment', 'create', 'archive'
@@ -119,6 +119,7 @@ export default async function handler(req, res) {
   if (req.method === 'PATCH') {
     const userId = await requireAuth(req, res);
     if (!userId) return;
+    const userName = await getUserName(req, res);
 
     try {
       const { status, priority, archived, column, task, owner, person, dueDate, context, type, tags, subtasks, pinned, order } = req.body;
@@ -142,39 +143,39 @@ export default async function handler(req, res) {
       const changes = [];
 
       if (status !== undefined && status !== currentTask.status) {
-        changes.push(createActivityEntry('update', 'status', currentTask.status, status));
+        changes.push(createActivityEntry('update', 'status', currentTask.status, status, userName));
         currentTask.status = status;
       }
       if (priority !== undefined && priority !== currentTask.priority) {
-        changes.push(createActivityEntry('update', 'priority', currentTask.priority, priority));
+        changes.push(createActivityEntry('update', 'priority', currentTask.priority, priority, userName));
         currentTask.priority = priority;
       }
       if (task !== undefined && task !== currentTask.task) {
-        changes.push(createActivityEntry('update', 'task', currentTask.task, task));
+        changes.push(createActivityEntry('update', 'task', currentTask.task, task, userName));
         currentTask.task = task;
       }
       if (owner !== undefined && owner !== currentTask.owner) {
-        changes.push(createActivityEntry('update', 'owner', currentTask.owner, owner));
+        changes.push(createActivityEntry('update', 'owner', currentTask.owner, owner, userName));
         currentTask.owner = owner;
       }
       if (person !== undefined && person !== currentTask.person) {
-        changes.push(createActivityEntry('update', 'person', currentTask.person, person));
+        changes.push(createActivityEntry('update', 'person', currentTask.person, person, userName));
         currentTask.person = person;
       }
       if (dueDate !== undefined && dueDate !== currentTask.dueDate) {
-        changes.push(createActivityEntry('update', 'dueDate', currentTask.dueDate, dueDate));
+        changes.push(createActivityEntry('update', 'dueDate', currentTask.dueDate, dueDate, userName));
         currentTask.dueDate = dueDate;
       }
       if (context !== undefined && context !== currentTask.context) {
-        changes.push(createActivityEntry('update', 'context', currentTask.context, context));
+        changes.push(createActivityEntry('update', 'context', currentTask.context, context, userName));
         currentTask.context = context;
       }
       if (type !== undefined && type !== currentTask.type) {
-        changes.push(createActivityEntry('update', 'type', currentTask.type, type));
+        changes.push(createActivityEntry('update', 'type', currentTask.type, type, userName));
         currentTask.type = type;
       }
       if (archived !== undefined && archived !== currentTask.archived) {
-        changes.push(createActivityEntry('update', 'archived', currentTask.archived, archived));
+        changes.push(createActivityEntry('update', 'archived', currentTask.archived, archived, userName));
         currentTask.archived = archived;
         if (archived) {
           currentTask.archivedAt = new Date().toISOString();
@@ -187,7 +188,7 @@ export default async function handler(req, res) {
         const oldTags = currentTask.tags || [];
         const newTags = Array.isArray(tags) ? tags : [];
         if (JSON.stringify(oldTags) !== JSON.stringify(newTags)) {
-          changes.push(createActivityEntry('update', 'tags', oldTags.join(', '), newTags.join(', ')));
+          changes.push(createActivityEntry('update', 'tags', oldTags.join(', '), newTags.join(', '), userName));
           currentTask.tags = newTags;
         }
       }
@@ -198,14 +199,14 @@ export default async function handler(req, res) {
         const newSubtasks = Array.isArray(subtasks) ? subtasks : [];
         // Only log if count changed significantly
         if (oldSubtasks.length !== newSubtasks.length) {
-          changes.push(createActivityEntry('update', 'subtasks', `${oldSubtasks.length} items`, `${newSubtasks.length} items`));
+          changes.push(createActivityEntry('update', 'subtasks', `${oldSubtasks.length} items`, `${newSubtasks.length} items`, userName));
         }
         currentTask.subtasks = newSubtasks;
       }
 
       // Handle pinned status
       if (pinned !== undefined && pinned !== currentTask.pinned) {
-        changes.push(createActivityEntry('update', 'pinned', currentTask.pinned ? 'yes' : 'no', pinned ? 'yes' : 'no'));
+        changes.push(createActivityEntry('update', 'pinned', currentTask.pinned ? 'yes' : 'no', pinned ? 'yes' : 'no', userName));
         currentTask.pinned = pinned;
         currentTask.pinnedAt = pinned ? new Date().toISOString() : null;
       }
@@ -242,6 +243,7 @@ export default async function handler(req, res) {
   if (req.method === 'DELETE') {
     const userId = await requireAuth(req, res);
     if (!userId) return;
+    const userName = await getUserName(req, res);
 
     try {
       const { permanent } = req.body || {};
@@ -266,7 +268,7 @@ export default async function handler(req, res) {
         // Add activity entry
         if (!tasks[taskIndex].activity) tasks[taskIndex].activity = [];
         tasks[taskIndex].activity.push(
-          createActivityEntry('delete', null, null, 'moved to trash')
+          createActivityEntry('delete', null, null, 'moved to trash', userName)
         );
       }
 
@@ -284,6 +286,7 @@ export default async function handler(req, res) {
   if (req.method === 'PUT') {
     const userId = await requireAuth(req, res);
     if (!userId) return;
+    const userName = await getUserName(req, res);
 
     try {
       const { restore } = req.body;
@@ -306,7 +309,7 @@ export default async function handler(req, res) {
       // Add activity entry
       if (!tasks[taskIndex].activity) tasks[taskIndex].activity = [];
       tasks[taskIndex].activity.push(
-        createActivityEntry('restore', null, null, 'restored from trash')
+        createActivityEntry('restore', null, null, 'restored from trash', userName)
       );
 
       tasks[taskIndex].updatedAt = new Date().toISOString();
