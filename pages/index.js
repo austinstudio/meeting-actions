@@ -1164,7 +1164,7 @@ export default function MeetingKanban() {
               {/* Add Meeting Button - Icon only */}
               <button
                 onClick={() => setShowPasteModal(true)}
-                className="w-10 h-10 flex items-center justify-center bg-emerald-600 dark:bg-emerald-500 text-white rounded-lg hover:bg-emerald-700 dark:hover:bg-emerald-600 transition-colors"
+                className="w-10 h-10 flex items-center justify-center border border-emerald-600 dark:border-orange-500 text-emerald-600 dark:text-orange-500 rounded-lg hover:bg-emerald-50 dark:hover:bg-orange-500/10 transition-colors"
                 title="Add Meeting Transcript"
               >
                 <Plus size={18} />
@@ -1234,7 +1234,7 @@ export default function MeetingKanban() {
                   <h2 className="font-semibold text-slate-700 dark:text-slate-200">Meetings</h2>
                   <button
                     onClick={() => { setShowPasteModal(true); setMobileMenuOpen(false); }}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-emerald-600 dark:bg-emerald-500 text-white rounded-md font-medium hover:bg-emerald-700 dark:hover:bg-emerald-600 transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 text-xs border border-emerald-600 dark:border-orange-500 text-emerald-600 dark:text-orange-500 rounded-md font-medium hover:bg-emerald-50 dark:hover:bg-orange-500/10 transition-colors"
                     title="Add Meeting Transcript"
                   >
                     <Plus size={12} />
