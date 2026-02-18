@@ -256,10 +256,32 @@ export default async function handler(req, res) {
 
       console.log('Processing transcript:', title || 'Untitled meeting');
 
+      // Fetch glossary for known people directory
+      let glossaryPrompt = '';
+      try {
+        const glossaryEntries = await kv.get('glossary') || [];
+        const userGlossary = glossaryEntries.filter(e => e.userId === userId);
+        if (userGlossary.length > 0) {
+          const lines = userGlossary.map(e => {
+            let line = `- ${e.name}`;
+            if (e.aliases.length > 0) {
+              line += ` (may appear as: ${e.aliases.join(', ')})`;
+            }
+            if (e.role || e.team) {
+              line += ` — ${[e.role, e.team].filter(Boolean).join(', ')}`;
+            }
+            return line;
+          });
+          glossaryPrompt = `\n\n## KNOWN PEOPLE DIRECTORY\nThe following people are known contacts. When a name in the transcript sounds similar to one of these, use the CORRECT spelling from this list. This applies to task owners, participants, and follow-up persons.\n\n${lines.join('\n')}\n`;
+        }
+      } catch (glossaryError) {
+        console.error('Failed to fetch glossary, proceeding without it:', glossaryError);
+      }
+
       // Call Gemini to extract action items
       const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
-      
-      const result = await model.generateContent(EXTRACTION_PROMPT + transcript);
+
+      const result = await model.generateContent(EXTRACTION_PROMPT + glossaryPrompt + '\n' + transcript);
       const response = await result.response;
       const responseText = response.text();
       

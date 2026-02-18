@@ -15,6 +15,7 @@ import EditTaskModal from '../components/task/EditTaskModal';
 import AddTaskModal from '../components/task/AddTaskModal';
 import AskAIModal from '../components/ai/AskAIModal';
 import SmartSuggestionsBar from '../components/ai/SmartSuggestionsBar';
+import PeopleGlossaryModal from '../components/ui/PeopleGlossaryModal';
 import WhatsNewModal from '../components/ui/WhatsNewModal';
 import ConfirmModal from '../components/ui/ConfirmModal';
 import AddColumnModal from '../components/ui/AddColumnModal';
@@ -59,6 +60,7 @@ export default function MeetingKanban() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Mobile sidebar drawer
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false); // Mobile filter sheet
   const [showImportHistory, setShowImportHistory] = useState(false); // Import history modal
+  const [showGlossary, setShowGlossary] = useState(false); // People glossary modal
   const [showWhatsNew, setShowWhatsNew] = useState(false); // What's New modal
   const [newFeatures, setNewFeatures] = useState([]); // Features to display in What's New
   const [showAllFeatures, setShowAllFeatures] = useState(false); // Show all features vs just new
@@ -1189,6 +1191,15 @@ export default function MeetingKanban() {
                 <History size={16} />
               </button>
 
+              {/* People Glossary Button */}
+              <button
+                onClick={() => setShowGlossary(true)}
+                className="w-10 h-10 flex items-center justify-center text-slate-500 dark:text-neutral-400 hover:text-indigo-600 dark:hover:text-orange-500 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                title="People Glossary"
+              >
+                <Users size={16} />
+              </button>
+
               {/* Divider */}
               <div className="w-8 h-px bg-slate-200 dark:bg-neutral-800 my-1" />
 
@@ -1246,6 +1257,13 @@ export default function MeetingKanban() {
                     title="Import History"
                   >
                     <History size={16} />
+                  </button>
+                  <button
+                    onClick={() => { setShowGlossary(true); setMobileMenuOpen(false); }}
+                    className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-orange-500 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                    title="People Glossary"
+                  >
+                    <Users size={16} />
                   </button>
                   <div className="flex-1" />
                   <button
@@ -1602,6 +1620,11 @@ export default function MeetingKanban() {
           setSelectedMeeting(meetingId);
           setMobileMenuOpen(false);
         }}
+      />
+
+      <PeopleGlossaryModal
+        isOpen={showGlossary}
+        onClose={() => setShowGlossary(false)}
       />
 
       <AddTaskModal
