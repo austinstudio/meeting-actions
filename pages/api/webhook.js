@@ -256,13 +256,33 @@ export default async function handler(req, res) {
 
       console.log('Processing transcript:', title || 'Untitled meeting');
 
-      // Fetch glossary for known people directory
+      // Fetch contacts (with glossary fallback) for known people directory
       let glossaryPrompt = '';
       try {
-        const glossaryEntries = await kv.get('glossary') || [];
-        const userGlossary = glossaryEntries.filter(e => e.userId === userId);
-        if (userGlossary.length > 0) {
-          const lines = userGlossary.map(e => {
+        // Try contacts first, fall back to glossary
+        let people = [];
+        const contacts = await kv.get('contacts') || [];
+        const userContacts = contacts.filter(c => c.userId === userId && !c.deleted);
+        if (userContacts.length > 0) {
+          people = userContacts.map(c => ({
+            name: c.name,
+            aliases: c.aliases || [],
+            role: c.role || '',
+            team: c.team || ''
+          }));
+        } else {
+          // Fallback to glossary for users who haven't migrated
+          const glossaryEntries = await kv.get('glossary') || [];
+          const userGlossary = glossaryEntries.filter(e => e.userId === userId);
+          people = userGlossary.map(e => ({
+            name: e.name,
+            aliases: e.aliases || [],
+            role: e.role || '',
+            team: e.team || ''
+          }));
+        }
+        if (people.length > 0) {
+          const lines = people.map(e => {
             let line = `- ${e.name}`;
             if (e.aliases.length > 0) {
               line += ` (may appear as: ${e.aliases.join(', ')})`;
@@ -275,7 +295,7 @@ export default async function handler(req, res) {
           glossaryPrompt = `\n\n## KNOWN PEOPLE DIRECTORY\nThe following people are known contacts. When a name in the transcript sounds similar to one of these, use the CORRECT spelling from this list. This applies to task owners, participants, and follow-up persons.\n\n${lines.join('\n')}\n`;
         }
       } catch (glossaryError) {
-        console.error('Failed to fetch glossary, proceeding without it:', glossaryError);
+        console.error('Failed to fetch contacts/glossary, proceeding without it:', glossaryError);
       }
 
       // Call Gemini to extract action items
