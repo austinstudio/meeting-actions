@@ -1,18 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Check, SkipForward, Trash2, LayoutGrid } from 'lucide-react';
 import MobileTaskCard from './MobileTaskCard';
-import { COLUMN_COLORS } from '../constants';
-
-const DARK_COLUMN_COLORS = {
-  slate: 'bg-slate-700 text-slate-100',
-  blue: 'bg-blue-700 text-blue-100',
-  amber: 'bg-amber-700 text-amber-100',
-  emerald: 'bg-emerald-700 text-emerald-100',
-  purple: 'bg-purple-700 text-purple-100',
-  rose: 'bg-rose-700 text-rose-100',
-  indigo: 'bg-indigo-700 text-indigo-100',
-  teal: 'bg-teal-700 text-teal-100',
-};
 
 export default function MobileTriage({ tasks, columns, meetings, onAssign, onDelete, onViewBoard, onEditTask }) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -21,7 +9,8 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
 
   // Filter out skipped tasks for the current session
   const triageTasks = tasks.filter(t => !skippedIds.has(t.id));
-  const currentTask = triageTasks[currentIndex];
+  const safeIndex = Math.min(currentIndex, Math.max(triageTasks.length - 1, 0));
+  const currentTask = triageTasks[safeIndex] || null;
   const totalRemaining = triageTasks.length;
 
   // Destination columns (all columns except uncategorized)
@@ -142,7 +131,7 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Triage</h2>
           <p className="text-sm text-slate-500 dark:text-neutral-400">
-            {currentIndex + 1} of {totalRemaining} to sort
+            {safeIndex + 1} of {totalRemaining} to triage
           </p>
         </div>
         <button

@@ -936,10 +936,6 @@ export default function MeetingKanban() {
     }
   }, [isMobile, unfiledTasks.length, mobileView]);
 
-  const handleMobileAssign = (taskId, columnId) => {
-    handleDrop(taskId, columnId);
-  };
-
   const stats = {
     total: tasks.filter(t => !t.archived && !t.deleted).length,
     mine: tasks.filter(t => isCurrentUser(t.owner, currentUser) && !t.archived && !t.deleted).length,
@@ -1401,7 +1397,7 @@ export default function MeetingKanban() {
                 tasks={unfiledTasks}
                 columns={columns}
                 meetings={meetings}
-                onAssign={handleMobileAssign}
+                onAssign={handleDrop}
                 onDelete={handleDeleteTask}
                 onViewBoard={() => setMobileView('board')}
                 onEditTask={(task) => setEditingTask(task)}

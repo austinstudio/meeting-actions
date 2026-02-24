@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Inbox } from 'lucide-react';
 import MobileTaskCard from './MobileTaskCard';
-import { COLUMN_COLORS } from '../constants';
 
 export default function MobileBoard({ tasks, columns, meetings, onEditTask, onViewTriage, unfiledCount }) {
   const [activeColumnId, setActiveColumnId] = useState(() => columns[0]?.id || 'uncategorized');
