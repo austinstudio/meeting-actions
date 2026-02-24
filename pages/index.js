@@ -22,6 +22,9 @@ import AddColumnModal from '../components/ui/AddColumnModal';
 import FilterDropdown from '../components/ui/FilterDropdown';
 import MobileFilterSheet from '../components/ui/MobileFilterSheet';
 import SearchInput from '../components/ui/SearchInput';
+import useIsMobile from '../hooks/useIsMobile';
+import MobileTriage from '../components/mobile/MobileTriage';
+import MobileBoard from '../components/mobile/MobileBoard';
 
 export default function MeetingKanban() {
   const { data: session } = useSession();
@@ -66,6 +69,8 @@ export default function MeetingKanban() {
   const [showAllFeatures, setShowAllFeatures] = useState(false); // Show all features vs just new
   const [showAskAI, setShowAskAI] = useState(false); // AI Assistant modal
   const [githubStatus, setGithubStatus] = useState(null); // GitHub connection status
+  const isMobile = useIsMobile();
+  const [mobileView, setMobileView] = useState('triage'); // 'triage' | 'board'
 
   // Fetch GitHub connection status
   const fetchGithubStatus = async () => {
@@ -922,6 +927,15 @@ export default function MeetingKanban() {
     return true;
   });
 
+  const unfiledTasks = tasks.filter(t => t.status === 'uncategorized' && !t.deleted && !t.archived);
+
+  // Auto-switch to board when no unfiled tasks on mobile
+  useEffect(() => {
+    if (isMobile && mobileView === 'triage' && unfiledTasks.length === 0) {
+      setMobileView('board');
+    }
+  }, [isMobile, unfiledTasks.length, mobileView]);
+
   const stats = {
     total: tasks.filter(t => !t.archived && !t.deleted).length,
     mine: tasks.filter(t => isCurrentUser(t.owner, currentUser) && !t.archived && !t.deleted).length,
@@ -1145,7 +1159,7 @@ export default function MeetingKanban() {
         <aside className={`
           ${sidebarCollapsed ? 'md:w-16' : 'md:w-80'}
           fixed md:relative inset-y-0 left-0 z-50 md:z-auto
-          w-80
+          w-64
           transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
           border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950
           h-full md:h-[calc(100vh-93px)]
@@ -1376,7 +1390,30 @@ export default function MeetingKanban() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 p-3 md:p-6 overflow-x-auto h-[calc(100vh-73px)] md:h-[calc(100vh-93px)] flex flex-col">
+        <main className={`flex-1 h-[calc(100vh-73px)] md:h-[calc(100vh-93px)] flex flex-col ${isMobile ? '' : 'p-3 md:p-6 overflow-x-auto'}`}>
+          {isMobile ? (
+            mobileView === 'triage' && unfiledTasks.length > 0 ? (
+              <MobileTriage
+                tasks={unfiledTasks}
+                columns={columns}
+                meetings={meetings}
+                onAssign={handleDrop}
+                onDelete={handleDeleteTask}
+                onViewBoard={() => setMobileView('board')}
+                onEditTask={(task) => setEditingTask(task)}
+              />
+            ) : (
+              <MobileBoard
+                tasks={filteredTasks}
+                columns={columns}
+                meetings={meetings}
+                onEditTask={(task) => setEditingTask(task)}
+                onViewTriage={() => setMobileView('triage')}
+                unfiledCount={unfiledTasks.length}
+              />
+            )
+          ) : (
+          <>
           {/* Filters - Compact single row with dropdowns */}
           <div className="flex items-center justify-between gap-2 md:gap-4 mb-4 md:mb-6">
             <div className="flex items-center gap-2 flex-wrap flex-1">
@@ -1559,6 +1596,8 @@ export default function MeetingKanban() {
             <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-lg text-rose-700 dark:text-rose-400 text-sm">
               {error}
             </div>
+          )}
+          </>
           )}
         </main>
       </div>
