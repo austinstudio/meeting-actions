@@ -23,8 +23,6 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
     setTimeout(() => {
       callback();
       setAnimatingOut(null);
-      // If we assigned the last visible task, stay at index 0
-      // (the array shrinks, so currentIndex might overshoot)
     }, 300);
   }, []);
 
@@ -33,7 +31,6 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
     const taskId = currentTask.id;
     animateAndAdvance('right', () => {
       onAssign(taskId, columnId);
-      // After removing a task from the list, if currentIndex >= new length, wrap to 0
       setCurrentIndex(prev => {
         const newLength = triageTasks.length - 1;
         return prev >= newLength ? 0 : prev;
@@ -125,26 +122,26 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
     : 'translate-x-0 opacity-100';
 
   return (
-    <div className="flex flex-col h-full px-4 pt-4 pb-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Triage</h2>
-          <p className="text-sm text-slate-500 dark:text-neutral-400">
-            {safeIndex + 1} of {totalRemaining} to triage
-          </p>
+    <div className="flex flex-col h-full px-4 pt-3 pb-4 overflow-y-auto">
+      {/* Header — compact single row */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">Triage</h2>
+          <span className="text-xs text-slate-500 dark:text-neutral-400">
+            {safeIndex + 1}/{totalRemaining}
+          </span>
         </div>
         <button
           onClick={onViewBoard}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
         >
-          <LayoutGrid size={16} />
+          <LayoutGrid size={14} />
           Board
         </button>
       </div>
 
-      {/* Card area */}
-      <div className="flex-1 flex items-start justify-center overflow-hidden pt-2">
+      {/* Card area — no flex-1, natural height */}
+      <div className="overflow-hidden">
         <div
           className={`w-full transition-all duration-300 ease-out ${cardTransform}`}
         >
@@ -152,37 +149,38 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
         </div>
       </div>
 
-      {/* Quick-assign buttons */}
-      <div className="mt-4 space-y-3">
-        <div className="flex flex-wrap gap-2 justify-center">
+      {/* Move to — column buttons in a tight grid */}
+      <div className="mt-3">
+        <p className="text-xs text-slate-400 dark:text-neutral-500 mb-2 text-center">Move to</p>
+        <div className="grid grid-cols-3 gap-1.5">
           {destinationColumns.map(col => (
             <button
               key={col.id}
               onClick={() => handleAssign(col.id)}
-              className={`px-4 py-2.5 rounded-xl text-sm font-medium border active:scale-95 transition-all ${getColumnButtonColor(col.color)} ${getDarkColumnButtonColor(col.color)}`}
+              className={`px-2 py-2 rounded-lg text-xs font-medium border active:scale-95 transition-all text-center ${getColumnButtonColor(col.color)} ${getDarkColumnButtonColor(col.color)}`}
             >
               {col.label}
             </button>
           ))}
         </div>
+      </div>
 
-        {/* Secondary actions */}
-        <div className="flex items-center justify-center gap-4">
-          <button
-            onClick={handleSkip}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-200 transition-colors"
-          >
-            <SkipForward size={16} />
-            Skip
-          </button>
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-400 dark:text-neutral-500 hover:text-rose-500 dark:hover:text-rose-400 transition-colors"
-          >
-            <Trash2 size={16} />
-            Delete
-          </button>
-        </div>
+      {/* Skip + Delete — inline row */}
+      <div className="flex items-center justify-center gap-6 mt-3">
+        <button
+          onClick={handleSkip}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-200 transition-colors"
+        >
+          <SkipForward size={14} />
+          Skip
+        </button>
+        <button
+          onClick={handleDelete}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs text-slate-400 dark:text-neutral-500 hover:text-rose-500 dark:hover:text-rose-400 transition-colors"
+        >
+          <Trash2 size={14} />
+          Delete
+        </button>
       </div>
     </div>
   );
