@@ -1163,7 +1163,7 @@ export default function MeetingKanban() {
         <aside className={`
           ${sidebarCollapsed ? 'md:w-16' : 'md:w-80'}
           fixed md:relative inset-y-0 left-0 z-50 md:z-auto
-          w-80
+          w-64
           transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
           border-r border-slate-200 dark:border-neutral-800 bg-white dark:bg-neutral-950
           h-full md:h-[calc(100vh-93px)]
