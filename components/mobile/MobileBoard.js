@@ -67,10 +67,10 @@ export default function MobileBoard({ tasks, columns, meetings, onEditTask, onVi
       )}
 
       {/* Column tabs */}
+      {/* Column tabs — wrap on mobile so all are visible */}
       <div
         ref={tabsRef}
-        className="flex gap-1 overflow-x-auto px-3 pt-3 pb-1 scrollbar-none"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        className="flex flex-wrap gap-1.5 px-3 pt-3 pb-1"
       >
         {sortedColumns.map(col => {
           const isActive = col.id === activeColumnId;
@@ -80,14 +80,14 @@ export default function MobileBoard({ tasks, columns, meetings, onEditTask, onVi
               key={col.id}
               ref={isActive ? activeTabRef : null}
               onClick={() => setActiveColumnId(col.id)}
-              className={`shrink-0 px-3 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                 isActive
                   ? `bg-white dark:bg-neutral-800 shadow-sm border border-slate-200 dark:border-neutral-700 ${getTabColor(col.color, true)}`
                   : 'text-slate-500 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800'
               }`}
             >
               {col.label}
-              <span className={`ml-1.5 text-xs ${isActive ? 'opacity-70' : 'opacity-50'}`}>{count}</span>
+              <span className={`ml-1 text-xs ${isActive ? 'opacity-70' : 'opacity-50'}`}>{count}</span>
             </button>
           );
         })}

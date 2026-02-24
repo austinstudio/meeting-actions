@@ -144,9 +144,9 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
       </div>
 
       {/* Card area */}
-      <div className="flex-1 flex items-center justify-center overflow-hidden">
+      <div className="flex-1 flex items-start justify-center overflow-hidden pt-2">
         <div
-          className={`w-full max-w-sm transition-all duration-300 ease-out ${cardTransform}`}
+          className={`w-full transition-all duration-300 ease-out ${cardTransform}`}
         >
           <MobileTaskCard task={currentTask} meeting={meeting} large onTap={() => onEditTask?.(currentTask)} />
         </div>

@@ -1703,13 +1703,15 @@ export default function MeetingKanban() {
         meetings={meetings}
       />
 
-      {/* Floating AI Suggestions Bar */}
-      <SmartSuggestionsBar
-        tasks={tasks}
-        meetings={meetings}
-        loading={loading}
-        onEditTask={(task) => setEditingTask(task)}
-      />
+      {/* Floating AI Suggestions Bar — hidden on mobile to avoid covering triage/board actions */}
+      {!isMobile && (
+        <SmartSuggestionsBar
+          tasks={tasks}
+          meetings={meetings}
+          loading={loading}
+          onEditTask={(task) => setEditingTask(task)}
+        />
+      )}
     </div>
   );
 }
