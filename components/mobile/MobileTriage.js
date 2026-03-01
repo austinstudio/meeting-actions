@@ -61,12 +61,6 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
     });
   }, [currentTask, triageTasks.length, onDelete, animateAndAdvance]);
 
-  const handleSetPriority = useCallback((priority) => {
-    if (!currentTask || currentTask.priority === priority) return;
-    // Update priority immediately for better UX
-    onEditTask({ ...currentTask, priority });
-  }, [currentTask, onEditTask]);
-
   const getColumnButtonColor = (color) => {
     const lightColors = {
       slate: 'bg-slate-100 text-slate-700 border-slate-300',
