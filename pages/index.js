@@ -1400,7 +1400,7 @@ export default function MeetingKanban() {
                 onAssign={handleDrop}
                 onDelete={handleDeleteTask}
                 onViewBoard={() => setMobileView('board')}
-                onEditTask={(task) => setEditingTask(task)}
+                onEditTask={handleEditTask}
               />
             ) : (
               <MobileBoard
