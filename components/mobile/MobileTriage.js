@@ -1,22 +1,30 @@
 import { useState, useCallback } from 'react';
-import { Check, SkipForward, Trash2, LayoutGrid } from 'lucide-react';
+import { Check, SkipForward, Trash2, LayoutGrid, Pin } from 'lucide-react';
 import MobileTaskCard from './MobileTaskCard';
 
-export default function MobileTriage({ tasks, columns, meetings, onAssign, onDelete, onViewBoard, onEditTask }) {
+// Primary columns shown full-width at the top
+const PRIMARY_COLUMN_IDS = ['todo', 'in-progress', 'done'];
+
+export default function MobileTriage({ tasks, columns, meetings, onAssign, onDelete, onPin, onViewBoard, onEditTask }) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [animatingOut, setAnimatingOut] = useState(null); // 'left' | 'right' | 'up' | null
+  const [animatingOut, setAnimatingOut] = useState(null);
   const [skippedIds, setSkippedIds] = useState(new Set());
 
-  // Filter out skipped tasks for the current session
   const triageTasks = tasks.filter(t => !skippedIds.has(t.id));
   const safeIndex = Math.min(currentIndex, Math.max(triageTasks.length - 1, 0));
   const currentTask = triageTasks[safeIndex] || null;
   const totalRemaining = triageTasks.length;
 
-  // Destination columns (all columns except uncategorized)
-  const destinationColumns = columns
+  // Split columns into primary (To Do, In Progress, Done) and secondary (rest)
+  const allDestinations = columns
     .filter(c => c.id !== 'uncategorized')
     .sort((a, b) => a.order - b.order);
+
+  const primaryColumns = PRIMARY_COLUMN_IDS
+    .map(id => allDestinations.find(c => c.id === id))
+    .filter(Boolean);
+
+  const secondaryColumns = allDestinations.filter(c => !PRIMARY_COLUMN_IDS.includes(c.id));
 
   const animateAndAdvance = useCallback((direction, callback) => {
     setAnimatingOut(direction);
@@ -61,6 +69,11 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
     });
   }, [currentTask, triageTasks.length, onDelete, animateAndAdvance]);
 
+  const handlePin = useCallback(() => {
+    if (!currentTask) return;
+    onPin(currentTask.id, !currentTask.pinned);
+  }, [currentTask, onPin]);
+
   const getColumnButtonColor = (color) => {
     const lightColors = {
       slate: 'bg-slate-100 text-slate-700 border-slate-300',
@@ -89,7 +102,7 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
     return darkColors[color] || darkColors.slate;
   };
 
-  // Empty state: all caught up
+  // Empty state
   if (totalRemaining === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full px-6 text-center">
@@ -123,7 +136,7 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
 
   return (
     <div className="flex flex-col h-full px-4 pt-3 pb-4 overflow-y-auto">
-      {/* Header — compact single row */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-baseline gap-2">
           <h2 className="text-base font-semibold text-slate-900 dark:text-white">Triage</h2>
@@ -140,33 +153,55 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
         </button>
       </div>
 
-      {/* Card area — no flex-1, natural height */}
+      {/* Card */}
       <div className="overflow-hidden">
-        <div
-          className={`w-full transition-all duration-300 ease-out ${cardTransform}`}
-        >
+        <div className={`w-full transition-all duration-300 ease-out ${cardTransform}`}>
           <MobileTaskCard task={currentTask} meeting={meeting} large onTap={() => onEditTask?.(currentTask)} />
         </div>
       </div>
 
-      {/* Move to — column buttons in a tight grid */}
-      <div className="mt-3">
-        <p className="text-xs text-slate-400 dark:text-neutral-500 mb-2 text-center">Move to</p>
-        <div className="grid grid-cols-3 gap-1.5">
-          {destinationColumns.map(col => (
-            <button
-              key={col.id}
-              onClick={() => handleAssign(col.id)}
-              className={`px-2 py-2 rounded-lg text-xs font-medium border active:scale-95 transition-all text-center ${getColumnButtonColor(col.color)} ${getDarkColumnButtonColor(col.color)}`}
-            >
-              {col.label}
-            </button>
-          ))}
-        </div>
+      {/* Actions */}
+      <div className="mt-3 space-y-1.5">
+        {/* Primary columns — full width stacked */}
+        {primaryColumns.map(col => (
+          <button
+            key={col.id}
+            onClick={() => handleAssign(col.id)}
+            className={`w-full px-3 py-2.5 rounded-lg text-sm font-medium border active:scale-[0.98] transition-all ${getColumnButtonColor(col.color)} ${getDarkColumnButtonColor(col.color)}`}
+          >
+            {col.label}
+          </button>
+        ))}
+
+        {/* Secondary columns — 2-col grid */}
+        {secondaryColumns.length > 0 && (
+          <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+            {secondaryColumns.map(col => (
+              <button
+                key={col.id}
+                onClick={() => handleAssign(col.id)}
+                className={`px-2 py-2 rounded-lg text-xs font-medium border active:scale-95 transition-all text-center ${getColumnButtonColor(col.color)} ${getDarkColumnButtonColor(col.color)}`}
+              >
+                {col.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Skip + Delete — inline row */}
-      <div className="flex items-center justify-center gap-6 mt-3">
+      {/* Pin, Skip, Delete */}
+      <div className="flex items-center justify-center gap-4 mt-3">
+        <button
+          onClick={handlePin}
+          className={`flex items-center gap-1 px-3 py-1.5 text-xs transition-colors ${
+            currentTask?.pinned
+              ? 'text-indigo-600 dark:text-orange-400'
+              : 'text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-orange-400'
+          }`}
+        >
+          <Pin size={14} className={currentTask?.pinned ? 'fill-current' : ''} />
+          {currentTask?.pinned ? 'Pinned' : 'Pin'}
+        </button>
         <button
           onClick={handleSkip}
           className="flex items-center gap-1 px-3 py-1.5 text-xs text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-200 transition-colors"

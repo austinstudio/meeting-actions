@@ -1399,6 +1399,7 @@ export default function MeetingKanban() {
                 meetings={meetings}
                 onAssign={handleDrop}
                 onDelete={handleDeleteTask}
+                onPin={handlePinTask}
                 onViewBoard={() => setMobileView('board')}
                 onEditTask={(task) => setEditingTask(task)}
               />
