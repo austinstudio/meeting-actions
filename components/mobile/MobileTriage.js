@@ -161,7 +161,7 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
       </div>
 
       {/* Actions */}
-      <div className="mt-3 space-y-1.5">
+      <div className="mt-3 space-y-2.5">
         {/* Primary columns — full width stacked */}
         {primaryColumns.map(col => (
           <button
@@ -175,7 +175,7 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
 
         {/* Secondary columns — 2-col grid */}
         {secondaryColumns.length > 0 && (
-          <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+          <div className="grid grid-cols-2 gap-2.5">
             {secondaryColumns.map(col => (
               <button
                 key={col.id}
