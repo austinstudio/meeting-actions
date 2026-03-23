@@ -1,0 +1,16 @@
+name = "meeting-actions-email-worker"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+workers_dev = false
+
+# Route for d2-lab.com domain (needed for deployment)
+[[routes]]
+pattern = "email-worker.d2-lab.com/*"
+zone_name = "d2-lab.com"
+
+# The shared secret is stored as a Cloudflare Worker secret (not here).
+# Set it with: wrangler secret put INBOUND_EMAIL_SECRET
+
+# The Vercel endpoint URL where parsed emails are forwarded.
+# Set it with: wrangler secret put WEBHOOK_URL
+# Example value: https://your-app.vercel.app/api/inbound-email
