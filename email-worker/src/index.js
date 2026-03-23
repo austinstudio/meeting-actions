@@ -3,8 +3,9 @@ import PostalMime from 'postal-mime';
 export default {
   async email(message, env) {
     const parser = new PostalMime();
-    const rawEmail = await streamToArrayBuffer(message.raw);
-    const parsed = await parser.parse(rawEmail);
+    const rawEmail = new Response(message.raw);
+    const rawBuffer = await rawEmail.arrayBuffer();
+    const parsed = await parser.parse(rawBuffer);
 
     const payload = {
       from: message.from,
@@ -49,24 +50,3 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-async function streamToArrayBuffer(stream) {
-  const reader = stream.getReader();
-  const chunks = [];
-  let totalLength = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    totalLength += value.byteLength;
-  }
-
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(new Uint8Array(chunk.buffer || chunk), offset);
-    offset += chunk.byteLength;
-  }
-
-  return result.buffer;
-}
