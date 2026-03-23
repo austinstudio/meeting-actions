@@ -19,7 +19,8 @@ export default {
       attachments: (parsed.attachments || []).map(a => ({
         filename: a.filename,
         mimeType: a.mimeType,
-        size: a.content?.byteLength || 0
+        size: a.content?.byteLength || 0,
+        content: a.content ? arrayBufferToBase64(a.content) : null
       }))
     };
 
@@ -38,6 +39,15 @@ export default {
     }
   }
 };
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
 
 async function streamToArrayBuffer(stream) {
   const reader = stream.getReader();
