@@ -198,7 +198,7 @@ export default async function handler(req, res) {
   }
 
   // Resolve userId — env var or mapped from sender email
-  const userId = process.env.INBOUND_EMAIL_USER_ID;
+  const userId = (process.env.INBOUND_EMAIL_USER_ID || '').trim();
   if (!userId) {
     console.error('INBOUND_EMAIL_USER_ID env var not set');
     return res.status(500).json({ error: 'Server not configured for email import' });
