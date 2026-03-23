@@ -4,10 +4,11 @@ import { NextResponse } from 'next/server';
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
-  // Allow access to login page and auth API routes
+  // Allow access to login page, auth API routes, and inbound email webhook
   if (
     pathname.startsWith('/login') ||
-    pathname.startsWith('/api/auth')
+    pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/inbound-email')
   ) {
     return NextResponse.next();
   }
