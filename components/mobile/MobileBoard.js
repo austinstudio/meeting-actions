@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Inbox } from 'lucide-react';
 import MobileTaskCard from './MobileTaskCard';
 
-export default function MobileBoard({ tasks, columns, meetings, onEditTask, onViewTriage, unfiledCount }) {
+export default function MobileBoard({ tasks, columns, meetings, onEditTask, onViewTriage, unfiledCount, currentUser }) {
   const [activeColumnId, setActiveColumnId] = useState(() => columns[0]?.id || 'uncategorized');
   const tabsRef = useRef(null);
   const activeTabRef = useRef(null);
@@ -108,6 +108,7 @@ export default function MobileBoard({ tasks, columns, meetings, onEditTask, onVi
                 task={task}
                 meeting={meeting}
                 onTap={() => onEditTask?.(task)}
+                currentUser={currentUser}
               />
             );
           })
