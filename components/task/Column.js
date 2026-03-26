@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, ArrowUpDown } from 'lucide-react';
-import { COLUMN_COLORS } from '../constants';
+import { Plus, ArrowUpDown, User } from 'lucide-react';
+import { COLUMN_COLORS, isCurrentUser } from '../constants';
 import TaskCard from './TaskCard';
 
 function SkeletonCard() {
@@ -29,7 +29,7 @@ function SkeletonCard() {
   );
 }
 
-export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete, onPinTask, viewDensity, onSortColumn, currentUser }) {
+export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete, onPinTask, viewDensity, onSortColumn, currentUser, showOnlyMyTasks, onToggleMyTasksFilter }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isColumnDragOver, setIsColumnDragOver] = useState(false);
   const [dropIndex, setDropIndex] = useState(null);
@@ -73,9 +73,15 @@ export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, 
     if (onColumnDragEnd) onColumnDragEnd();
   };
 
-  const columnTasks = tasks
-    .filter(t => t.status === column.id)
-    .sort((a, b) => {
+  let columnTasks = tasks
+    .filter(t => t.status === column.id);
+  
+  // Apply 'my tasks only' filter for uncategorized column
+  if (column.id === 'uncategorized' && showOnlyMyTasks) {
+    columnTasks = columnTasks.filter(t => isCurrentUser(t.owner, currentUser));
+  }
+  
+  columnTasks = columnTasks.sort((a, b) => {
       if (a.pinned && !b.pinned) return -1;
       if (!a.pinned && b.pinned) return 1;
       const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
@@ -99,6 +105,22 @@ export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, 
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-slate-700 dark:text-slate-200 text-sm">{column.label}</h3>
           <div className="flex items-center gap-1">
+            {column.id === 'uncategorized' && onToggleMyTasksFilter && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleMyTasksFilter();
+                }}
+                className={`p-1 rounded transition-colors ${
+                  showOnlyMyTasks
+                    ? 'text-indigo-600 dark:text-orange-500 bg-indigo-100/50 dark:bg-orange-500/10'
+                    : 'text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-neutral-800/50'
+                }`}
+                title={showOnlyMyTasks ? 'Show all tasks' : 'Show only my tasks'}
+              >
+                <User size={16} />
+              </button>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();

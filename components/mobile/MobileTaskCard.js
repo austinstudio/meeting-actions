@@ -1,11 +1,12 @@
 import { User } from 'lucide-react';
 import { DueDateBadge } from '../task/TaskCard';
+import { isCurrentUser } from '../constants';
 
-export default function MobileTaskCard({ task, meeting, onTap, large = false }) {
+export default function MobileTaskCard({ task, meeting, onTap, large = false, currentUser }) {
   return (
     <div
       onClick={() => onTap?.(task)}
-      className={`bg-white dark:bg-neutral-800 rounded-xl border border-slate-200 dark:border-neutral-700 shadow-sm ${large ? 'p-4' : 'p-3'} ${onTap ? 'active:scale-[0.98] transition-transform' : ''}`}
+      className={`bg-white dark:bg-neutral-800 rounded-xl border ${task.status === 'uncategorized' && task.owner && currentUser && !isCurrentUser(task.owner, currentUser) ? 'border-2 border-red-500' : 'border-slate-200 dark:border-neutral-700'} shadow-sm ${large ? 'p-4' : 'p-3'} ${onTap ? 'active:scale-[0.98] transition-transform' : ''}`}
     >
       {/* Priority + Title */}
       <div className="flex items-start gap-2">

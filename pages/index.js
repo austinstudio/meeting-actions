@@ -71,6 +71,7 @@ export default function MeetingKanban() {
   const [githubStatus, setGithubStatus] = useState(null); // GitHub connection status
   const isMobile = useIsMobile();
   const [mobileView, setMobileView] = useState('triage'); // 'triage' | 'board'
+  const [showOnlyMyTasksInUncategorized, setShowOnlyMyTasksInUncategorized] = useState(false); // Filter for uncategorized column
 
   // Fetch GitHub connection status
   const fetchGithubStatus = async () => {
@@ -1578,6 +1579,8 @@ export default function MeetingKanban() {
                   viewDensity={viewDensity}
                   onSortColumn={handleSortColumn}
                   currentUser={currentUser}
+                  showOnlyMyTasks={column.id === 'uncategorized' ? showOnlyMyTasksInUncategorized : false}
+                  onToggleMyTasksFilter={column.id === 'uncategorized' ? () => setShowOnlyMyTasksInUncategorized(!showOnlyMyTasksInUncategorized) : null}
                 />
                 {/* Delete column button for custom columns */}
                 {column.custom && (

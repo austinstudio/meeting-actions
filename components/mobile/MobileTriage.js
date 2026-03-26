@@ -5,7 +5,7 @@ import MobileTaskCard from './MobileTaskCard';
 // Primary columns shown full-width at the top
 const PRIMARY_COLUMN_IDS = ['todo', 'in-progress', 'done'];
 
-export default function MobileTriage({ tasks, columns, meetings, onAssign, onDelete, onPin, onViewBoard, onEditTask }) {
+export default function MobileTriage({ tasks, columns, meetings, onAssign, onDelete, onPin, onViewBoard, onEditTask, currentUser }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animatingOut, setAnimatingOut] = useState(null);
   const [skippedIds, setSkippedIds] = useState(new Set());
@@ -156,7 +156,7 @@ export default function MobileTriage({ tasks, columns, meetings, onAssign, onDel
       {/* Card */}
       <div className="overflow-hidden">
         <div className={`w-full transition-all duration-300 ease-out ${cardTransform}`}>
-          <MobileTaskCard task={currentTask} meeting={meeting} large onTap={() => onEditTask?.(currentTask)} />
+          <MobileTaskCard task={currentTask} meeting={meeting} large onTap={() => onEditTask?.(currentTask)} currentUser={currentUser} />
         </div>
       </div>
 
