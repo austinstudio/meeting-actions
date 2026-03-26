@@ -8,7 +8,8 @@ export async function middleware(request) {
   if (
     pathname.startsWith('/login') ||
     pathname.startsWith('/api/auth') ||
-    pathname.startsWith('/api/inbound-email')
+    pathname.startsWith('/api/inbound-email') ||
+    pathname.startsWith('/api/cron/')
   ) {
     return NextResponse.next();
   }

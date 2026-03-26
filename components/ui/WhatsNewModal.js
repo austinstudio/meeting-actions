@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Calendar, Sparkles, Smartphone, History, Gift, Users, Bot, Github, Mail } from 'lucide-react';
+import { X, Calendar, Sparkles, Smartphone, History, Gift, Users, Bot, Github, Mail, Bell } from 'lucide-react';
 
 const FEATURE_ICONS = {
   Sparkles: Sparkles,
@@ -9,7 +9,8 @@ const FEATURE_ICONS = {
   Users: Users,
   Bot: Bot,
   Github: Github,
-  Mail: Mail
+  Mail: Mail,
+  Bell: Bell
 };
 
 export default function WhatsNewModal({ isOpen, onClose, features, showAll = false }) {
