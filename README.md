@@ -145,6 +145,35 @@ Returns all meetings and tasks.
 
 ---
 
+## 📋 macOS Quick Capture
+
+Select text in **any app** (email, browser, Slack, etc.), right-click, and send it to Meeting Actions for AI extraction — action items, follow-ups, owners, and due dates are created automatically.
+
+### Setup
+
+1. **Add `CAPTURE_SECRET` to Vercel:**
+   ```bash
+   vercel env add CAPTURE_SECRET
+   # Paste your secret when prompted. Add to Production + Preview.
+   ```
+
+2. **Deploy** so the new `/api/quick-capture` endpoint is live.
+
+3. **Install the macOS Quick Action** on each Mac you want to use it from:
+   ```bash
+   CAPTURE_URL=https://YOUR-APP.vercel.app/api/quick-capture \
+   CAPTURE_SECRET=your-secret-here \
+   bash scripts/setup-quick-capture.sh
+   ```
+
+4. **Use it:** Select text → right-click → Services → **"Capture to Meeting Actions"**
+
+5. **Optional:** Assign a keyboard shortcut in System Settings → Keyboard → Keyboard Shortcuts → Services.
+
+You may need to log out and back in for the service to appear the first time.
+
+---
+
 ## ⚠️ Current Limitations
 
 This is a prototype with in-memory storage. Data will reset when the serverless function cold-starts. For production use, add a database:

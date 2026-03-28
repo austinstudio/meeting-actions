@@ -12,7 +12,7 @@ Complete - Global search across tasks and meetings
 - Smart reminders (browser notifications for overdue/due soon) ----- USE TEXT?
 - "This week", "Next week", "Overdue" quick filters
 - Recurring tasks (weekly 1:1s, monthly reviews). ------ Might be good
-- Daily overdue digest via ntfy + Vercel Cron  ------ USE TEXT?
+- COMPLETE - Daily task digest via ntfy + Vercel Cron (v5.3)
 
 ### 3. Task Dependencies
 - Link tasks that block each other
@@ -71,8 +71,8 @@ PRIORITY - Cleaner design for filters and tags
 - Import meeting attendees automatically
 
 ### 12. Email Integration
-- Email daily digest of your tasks
-- Forward emails to create tasks
+- COMPLETE - Daily task digest via ntfy push notification (v5.3)
+- COMPLETE - Forward emails to create tasks via Cloudflare Email Worker → import@d2-lab.com (v5.2)
 - Email task updates to stakeholders
 - Send reminder emails to task owners
 
@@ -140,7 +140,7 @@ COMPLETE - Collapse/expand subtasks
 
 PHONE INTERACTION....
 
-1. Daily overdue digest via ntfy + Vercel Cron — low effort since the ntfy infra is already wired up                               
+1. COMPLETE - Daily overdue digest via ntfy + Vercel Cron (v5.3)                               
   2. Export to CSV — quick win for getting data out
   3. Silent data limit warning — so you don't lose meetings without knowing                                                          
   4. Breaking up index.js — would make your auto-implement bot more reliable since it would be editing smaller, focused files instead
