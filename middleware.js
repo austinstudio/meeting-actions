@@ -9,6 +9,7 @@ export async function middleware(request) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/inbound-email') ||
+    pathname.startsWith('/api/quick-capture') ||
     pathname.startsWith('/api/cron/')
   ) {
     return NextResponse.next();
