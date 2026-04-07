@@ -34,7 +34,7 @@ export default function ContactLinkedMeetings({ meetings, loading }) {
               </p>
               {meeting.date && (
                 <p className="text-xs text-slate-500 dark:text-neutral-400 mt-0.5">
-                  {new Date(meeting.date).toLocaleDateString('en-US', {
+                  {new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', {
                     month: 'short', day: 'numeric', year: 'numeric'
                   })}
                 </p>

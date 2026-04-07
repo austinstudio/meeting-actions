@@ -56,7 +56,7 @@ export default function MeetingCard({ meeting, taskCount, isSelected, onClick, o
         <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 dark:text-neutral-400">
           <span className="flex items-center gap-1">
             <Calendar size={12} />
-            {new Date(meeting.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            {new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </span>
           {meeting.duration && (
             <span className="flex items-center gap-1">

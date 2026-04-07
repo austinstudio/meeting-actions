@@ -62,7 +62,7 @@ export default function ContactLinkedTasks({ tasks, loading }) {
                 )}
                 {task.dueDate && (
                   <span className="text-xs text-slate-400 dark:text-neutral-500">
-                    Due: {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    Due: {new Date(task.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </span>
                 )}
               </div>
