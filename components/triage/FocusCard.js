@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, ChevronLeft, ChevronRight, CheckCircle2, X, Clock, Paperclip } from 'lucide-react';
+import { Sparkles, ChevronLeft, ChevronRight, CheckCircle2, X, Clock, Paperclip, User, UserPlus } from 'lucide-react';
 import { bodySnippet, waitingDays } from '../../lib/triage-utils';
 
 const BADGE = {
@@ -9,9 +9,9 @@ const BADGE = {
 };
 
 export default function FocusCard({
-  email, index, total,
+  email, contact, index, total,
   onPrev, onNext,
-  onDraftReply, onSnooze, onDismiss, onMarkDone
+  onDraftReply, onSnooze, onDismiss, onMarkDone, onAddContact
 }) {
   if (!email) {
     return (
@@ -38,6 +38,21 @@ export default function FocusCard({
         <h2 className="text-base font-bold text-slate-900 dark:text-white">{email.subject || '(no subject)'}</h2>
         <div className="text-xs text-slate-600 dark:text-neutral-400 mt-1 flex items-center gap-2 flex-wrap">
           <strong>{email.sender_name || email.sender_email}</strong>
+          {contact ? (
+            <a
+              href={`/contacts?contact=${contact.id}`}
+              className="inline-flex items-center gap-1 text-[10px] bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900"
+            >
+              <User size={10} /> {contact.name}
+            </a>
+          ) : email.sender_email && onAddContact ? (
+            <button
+              onClick={() => onAddContact(email)}
+              className="inline-flex items-center gap-1 text-[10px] bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-neutral-300 px-1.5 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-neutral-700"
+            >
+              <UserPlus size={10} /> Add contact
+            </button>
+          ) : null}
           <span>·</span>
           <span className="flex items-center gap-1"><Clock size={11} /> {days}d ago</span>
           {email.has_attachments && <span className="flex items-center gap-1"><Paperclip size={11} /> {email.attachment_count}</span>}

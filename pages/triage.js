@@ -28,6 +28,7 @@ export default function TriagePage() {
   const [draftTarget, setDraftTarget] = useState(null);
   const [focusIndex, setFocusIndex] = useState(0);
   const [toast, setToast] = useState(null);
+  const [contactsByEmail, setContactsByEmail] = useState({});
 
   // Auth redirect
   useEffect(() => {
@@ -90,6 +91,21 @@ export default function TriagePage() {
 
   useEffect(() => { if (status === 'authenticated') load(); }, [load, status]);
 
+  const loadContacts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/contacts');
+      if (!res.ok) return;
+      const { contacts } = await res.json();
+      const map = {};
+      for (const c of contacts || []) {
+        if (c.email) map[c.email.toLowerCase().trim()] = c;
+      }
+      setContactsByEmail(map);
+    } catch {}
+  }, []);
+
+  useEffect(() => { if (status === 'authenticated') loadContacts(); }, [loadContacts, status]);
+
   useEffect(() => { setFocusIndex(0); }, [mode, emails.length]);
 
   const board = useMemo(() => {
@@ -146,6 +162,29 @@ export default function TriagePage() {
 
   const changeMode = (m) => { setMode(m); updateUrl({ mode: m, filters }); };
   const changeFilters = (f) => { setFilters(f); updateUrl({ mode, filters: f }); };
+
+  const onAddContact = async (email) => {
+    const name = (email.sender_name || email.sender_email || '').trim();
+    const addr = (email.sender_email || '').trim();
+    if (!name) return;
+    try {
+      const res = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email: addr, howWeMet: 'Added from email triage' })
+      });
+      if (!res.ok) throw new Error('Failed');
+      const { contact } = await res.json();
+      if (addr) {
+        setContactsByEmail(prev => ({ ...prev, [addr.toLowerCase()]: contact }));
+      }
+      setToast({ kind: 'success', text: `Added ${contact.name} to contacts` });
+      setTimeout(() => setToast(null), 3000);
+    } catch {
+      setToast({ kind: 'error', text: 'Failed to add contact' });
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
 
   const onDraftReply = (email) => setDraftTarget(email);
   const onSnooze = (email) => setSnoozeTarget(email);
@@ -214,22 +253,26 @@ export default function TriagePage() {
             <TriageCard
               key={email.outlook_id}
               email={email}
+              contact={contactsByEmail[(email.sender_email || '').toLowerCase()] || null}
               onDraftReply={onDraftReply}
               onSnooze={onSnooze}
               onDismiss={onDismiss}
               onMarkDone={onMarkDone}
               onCreateTask={onCreateTask}
+              onAddContact={onAddContact}
             />
           ))
         ) : mode === 'focus' ? (
           <FocusCard
             email={emails[focusIndex]}
+            contact={emails[focusIndex] ? contactsByEmail[(emails[focusIndex].sender_email || '').toLowerCase()] || null : null}
             index={focusIndex}
             total={emails.length}
             onPrev={() => setFocusIndex(i => Math.max(0, i - 1))}
             onNext={() => setFocusIndex(i => Math.min(i + 1, emails.length - 1))}
             onDraftReply={onDraftReply}
             onSnooze={onSnooze}
+            onAddContact={onAddContact}
             onDismiss={(email) => { onDismiss(email); setFocusIndex(i => Math.min(i, emails.length - 2)); }}
             onMarkDone={(email) => { onMarkDone(email); setFocusIndex(i => Math.min(i, emails.length - 2)); }}
           />

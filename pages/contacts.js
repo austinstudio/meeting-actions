@@ -95,6 +95,13 @@ export default function ContactsPage() {
     if (session) fetchContacts();
   }, [session, fetchContacts]);
 
+  // Open a contact automatically when ?contact=<id> is in the URL
+  useEffect(() => {
+    if (!router.isReady) return;
+    const id = router.query.contact;
+    if (id && typeof id === 'string') setSelectedContactId(id);
+  }, [router.isReady, router.query.contact]);
+
   // Fetch GitHub status
   useEffect(() => {
     if (session) {

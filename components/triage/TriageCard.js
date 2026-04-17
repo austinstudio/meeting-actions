@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Paperclip, Clock, CheckCircle2, Archive, X, ListPlus } from 'lucide-react';
+import { Sparkles, Paperclip, Clock, CheckCircle2, Archive, X, ListPlus, User, UserPlus } from 'lucide-react';
 import { bodySnippet, waitingDays } from '../../lib/triage-utils';
 
 const PRIORITY_STYLES = {
@@ -8,7 +8,7 @@ const PRIORITY_STYLES = {
   low:    { border: 'border-l-slate-400',  badge: 'bg-slate-100 text-slate-700 dark:bg-neutral-800 dark:text-neutral-300' }
 };
 
-export default function TriageCard({ email, onDraftReply, onSnooze, onCreateTask, onDismiss, onMarkDone }) {
+export default function TriageCard({ email, contact, onDraftReply, onSnooze, onCreateTask, onDismiss, onMarkDone, onAddContact }) {
   const t = email.triage || {};
   const style = PRIORITY_STYLES[t.priority] || PRIORITY_STYLES.low;
   const days = waitingDays(email);
@@ -38,10 +38,28 @@ export default function TriageCard({ email, onDraftReply, onSnooze, onCreateTask
       </div>
 
       <div className="text-[13px] font-bold text-slate-900 dark:text-white">{email.subject || '(no subject)'}</div>
-      <div className="text-[11px] text-slate-600 dark:text-neutral-400 mt-0.5">
-        <strong>{email.sender_name || email.sender_email}</strong>{' '}
-        <span className="text-slate-400">&lt;{email.sender_email}&gt;</span>
-        {recips.length > 0 && <> → {recips.join(', ')}{extraCount > 0 ? `, +${extraCount}` : ''}</>}
+      <div className="text-[11px] text-slate-600 dark:text-neutral-400 mt-0.5 flex items-center gap-2 flex-wrap">
+        <span>
+          <strong>{email.sender_name || email.sender_email}</strong>{' '}
+          <span className="text-slate-400">&lt;{email.sender_email}&gt;</span>
+        </span>
+        {contact ? (
+          <a
+            href={`/contacts?contact=${contact.id}`}
+            className="inline-flex items-center gap-1 text-[10px] bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900"
+          >
+            <User size={9} /> {contact.name}
+          </a>
+        ) : email.sender_email && onAddContact ? (
+          <button
+            onClick={() => onAddContact(email)}
+            className="inline-flex items-center gap-1 text-[10px] bg-slate-50 dark:bg-neutral-800 text-slate-600 dark:text-neutral-300 px-1.5 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-neutral-700"
+            title="Add this sender to your contacts"
+          >
+            <UserPlus size={9} /> Add contact
+          </button>
+        ) : null}
+        {recips.length > 0 && <span>→ {recips.join(', ')}{extraCount > 0 ? `, +${extraCount}` : ''}</span>}
       </div>
 
       <div className="text-[11px] text-slate-700 dark:text-neutral-300 mt-2 leading-relaxed border-l-2 border-slate-200 dark:border-neutral-700 pl-2">
