@@ -40,7 +40,6 @@ export default function TriagePage() {
   }, []);
   useEffect(() => {
     const saved = localStorage.getItem('theme') || 'system';
-    setTheme(saved);
     applyTheme(saved);
   }, [applyTheme]);
 
