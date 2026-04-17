@@ -27,6 +27,7 @@ export default function TriagePage() {
   const [snoozeTarget, setSnoozeTarget] = useState(null);
   const [draftTarget, setDraftTarget] = useState(null);
   const [focusIndex, setFocusIndex] = useState(0);
+  const [toast, setToast] = useState(null);
 
   // Auth redirect
   useEffect(() => {
@@ -151,9 +152,28 @@ export default function TriagePage() {
   const onPickSnooze = (email, iso) => { setSnoozeTarget(null); patchTriage(email.outlook_id, { snoozeUntil: iso }); };
   const onDismiss = (email) => patchTriage(email.outlook_id, { triageState: 'dismissed' });
   const onMarkDone = (email) => patchTriage(email.outlook_id, { triageState: 'done' });
-  const onCreateTask = (email) => {
-    // Route to the tasks tool with a prefill hint; a real integration is out of scope for v1.
-    window.open(`/?prefillTask=${encodeURIComponent(email.subject || '')}`, '_blank');
+  const onCreateTask = async (email) => {
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: `Follow up: ${email.subject || '(no subject)'}`,
+          type: 'follow-up',
+          person: email.sender_name || email.sender_email || null,
+          context: `From email: ${email.sender_name || email.sender_email || ''} · ${email.sent_at || ''}`,
+          priority: email.triage?.priority || 'medium'
+        })
+      });
+      if (!res.ok) throw new Error('Failed');
+      const { task } = await res.json();
+      await patchTriage(email.outlook_id, { linkedTaskId: task.id });
+      setToast({ kind: 'success', text: `Task created: ${task.task}` });
+      setTimeout(() => setToast(null), 3000);
+    } catch (err) {
+      setToast({ kind: 'error', text: 'Failed to create task' });
+      setTimeout(() => setToast(null), 3000);
+    }
   };
 
   if (status === 'loading') return null;
@@ -232,6 +252,15 @@ export default function TriagePage() {
       )}
       {draftTarget && (
         <DraftReplyModal email={draftTarget} onClose={() => setDraftTarget(null)} />
+      )}
+      {toast && (
+        <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-md shadow-lg text-sm ${
+          toast.kind === 'success'
+            ? 'bg-emerald-600 text-white'
+            : 'bg-red-600 text-white'
+        }`}>
+          {toast.text}
+        </div>
       )}
     </div>
   );
