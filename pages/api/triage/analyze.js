@@ -1,22 +1,22 @@
 // pages/api/triage/analyze.js
-// POST /api/triage/analyze — run AI classification on emails.
+// POST /api/triage/analyze — run AI classification on emails using Claude.
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic from '@anthropic-ai/sdk';
 import { kv } from '@vercel/kv';
 import { requireAuth } from '../../../lib/auth';
 import { bodySnippet, DEFAULT_TRIAGE } from '../../../lib/triage-utils';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const client = new Anthropic();
 
-const CLASSIFY_PROMPT = `You are analyzing an email on behalf of a busy professional to decide whether it needs a follow-up reply.
+const CLASSIFY_SYSTEM = `You are analyzing emails on behalf of a busy professional to decide whether each one needs a follow-up reply.
 
-Return a strict JSON object with exactly these fields (no commentary, no markdown):
+For every email you receive, return a strict JSON object with exactly these fields (no commentary, no markdown, no code fences):
 {
   "priority": "high" | "medium" | "low",
   "needsFollowUp": boolean,
-  "insight": string,             // 1-2 sentences explaining why this email does or does not need a reply
-  "suggestedAction": string,     // short phrase (e.g. "Approve scope or request a call"). Empty string if no action needed.
-  "deadlineDetected": string|null // ISO date if a deadline is mentioned, else null
+  "insight": string,              // 1-2 sentences explaining why this email does or does not need a reply
+  "suggestedAction": string,      // short phrase (e.g. "Approve scope or request a call"). Empty string if no action needed.
+  "deadlineDetected": string|null // ISO 8601 date (YYYY-MM-DD) if a deadline is mentioned, else null
 }
 
 Rules:
@@ -34,10 +34,10 @@ function extractJson(raw) {
   if (first >= 0 && last > first) {
     return JSON.parse(cleaned.slice(first, last + 1));
   }
-  throw new Error(`Could not parse JSON. Raw response: ${cleaned.slice(0, 300)}`);
+  throw new Error(`Could not parse JSON. Raw: ${cleaned.slice(0, 300)}`);
 }
 
-async function classifyEmail(model, email) {
+async function classifyEmail(email) {
   const input = {
     today: new Date().toISOString().slice(0, 10),
     subject: email.subject || '',
@@ -47,9 +47,21 @@ async function classifyEmail(model, email) {
     sent_at: email.sent_at,
     body: bodySnippet(email.body, 2000)
   };
-  const prompt = `${CLASSIFY_PROMPT}\n\nEmail JSON:\n${JSON.stringify(input, null, 2)}`;
-  const result = await model.generateContent(prompt);
-  return extractJson(result.response.text());
+
+  const response = await client.messages.create({
+    model: 'claude-opus-4-7',
+    max_tokens: 1024,
+    system: [
+      { type: 'text', text: CLASSIFY_SYSTEM, cache_control: { type: 'ephemeral' } }
+    ],
+    messages: [
+      { role: 'user', content: `Classify this email:\n${JSON.stringify(input, null, 2)}` }
+    ]
+  });
+
+  const textBlock = response.content.find(b => b.type === 'text');
+  if (!textBlock) throw new Error('No text block in Claude response');
+  return extractJson(textBlock.text);
 }
 
 export default async function handler(req, res) {
@@ -74,18 +86,18 @@ export default async function handler(req, res) {
     const triageKey = `email-triage:${userId}`;
     const triageMap = (await kv.get(triageKey)) || {};
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
     let analyzed = 0, skipped = 0, errors = 0;
     const errorSamples = [];
+
     for (const email of emails) {
+      if (!email.outlook_id) continue;
       const existing = triageMap[email.outlook_id];
       if (mode === 'unanalyzed' && existing?.analyzedAt) { skipped += 1; continue; }
 
       try {
-        const c = await classifyEmail(model, email);
+        const c = await classifyEmail(email);
         const nextState = existing?.triageState && existing.triageState !== 'fyi_only' && existing.triageState !== 'needs_reply'
-          ? existing.triageState // preserve manual moves like waiting_on / done / dismissed
+          ? existing.triageState
           : (c.needsFollowUp ? 'needs_reply' : 'fyi_only');
 
         triageMap[email.outlook_id] = {
@@ -120,6 +132,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ analyzed, skipped, errors, errorSamples });
   } catch (error) {
     console.error('POST /api/triage/analyze error:', error);
-    return res.status(500).json({ error: 'Failed to analyze' });
+    return res.status(500).json({ error: error?.message || 'Failed to analyze' });
   }
 }

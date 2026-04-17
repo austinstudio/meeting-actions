@@ -1,12 +1,12 @@
 // pages/api/triage/[id]/draft-reply.js
-// POST /api/triage/[id]/draft-reply — generate an AI draft reply for one email.
+// POST /api/triage/[id]/draft-reply — generate an AI draft reply using Claude.
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic from '@anthropic-ai/sdk';
 import { kv } from '@vercel/kv';
 import { requireAuth, getUserName } from '../../../../lib/auth';
 import { bodySnippet } from '../../../../lib/triage-utils';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const client = new Anthropic();
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,30 +26,36 @@ export default async function handler(req, res) {
     if (!email) return res.status(404).json({ error: 'Email not found' });
 
     const userName = await getUserName(req, res);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    const prompt = `You are drafting a reply to the email below on behalf of ${userName}.
+    const response = await client.messages.create({
+      model: 'claude-opus-4-7',
+      max_tokens: 1024,
+      system: `You draft professional, concise email replies on behalf of ${userName}.
 
-Write a professional, concise plain-text reply body only — no subject line, no "To:" header, no markdown, no signature block.
+Write only the plain-text reply body — no subject line, no "To:" header, no markdown, no signature block.
 - Address the sender by first name when the name is available.
 - Respond directly to questions or requests in the email.
 - If information is missing, ask for it specifically.
-- Keep it under 150 words.
+- Keep it under 150 words.`,
+      messages: [
+        {
+          role: 'user',
+          content: `Draft a reply to this email:
 
-Original email:
 From: ${email.sender_name || ''} <${email.sender_email || ''}>
 Subject: ${email.subject || ''}
 Sent: ${email.sent_at || ''}
 
-${bodySnippet(email.body, 3000)}
+${bodySnippet(email.body, 3000)}`
+        }
+      ]
+    });
 
-Draft reply:`;
-
-    const result = await model.generateContent(prompt);
-    const draft = result.response.text().trim();
+    const textBlock = response.content.find(b => b.type === 'text');
+    const draft = textBlock ? textBlock.text.trim() : '';
     return res.status(200).json({ draft });
   } catch (error) {
-    console.error('POST /api/triage/[id]/draft-reply error:', error);
-    return res.status(500).json({ error: 'Failed to generate draft' });
+    console.error('POST /api/triage/[id]/draft-reply error:', error?.message || error);
+    return res.status(500).json({ error: error?.message || 'Failed to generate draft' });
   }
 }
