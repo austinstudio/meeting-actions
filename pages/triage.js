@@ -9,6 +9,7 @@ import ViewSwitcher from '../components/triage/ViewSwitcher';
 import FilterBar from '../components/triage/FilterBar';
 import AnalyzeProgressBar from '../components/triage/AnalyzeProgressBar';
 import TriageCard from '../components/triage/TriageCard';
+import FocusCard from '../components/triage/FocusCard';
 import SnoozeMenu from '../components/triage/SnoozeMenu';
 import DraftReplyModal from '../components/triage/DraftReplyModal';
 import WhatsNewModal from '../components/ui/WhatsNewModal';
@@ -26,6 +27,7 @@ export default function TriagePage() {
   const [analyzeResult, setAnalyzeResult] = useState(null);
   const [snoozeTarget, setSnoozeTarget] = useState(null);
   const [draftTarget, setDraftTarget] = useState(null);
+  const [focusIndex, setFocusIndex] = useState(0);
   const [theme, setTheme] = useState('system');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showWhatsNew, setShowWhatsNew] = useState(false);
@@ -91,6 +93,19 @@ export default function TriagePage() {
   }, [mode, filters]);
 
   useEffect(() => { if (status === 'authenticated') load(); }, [load, status]);
+
+  useEffect(() => { setFocusIndex(0); }, [mode, emails.length]);
+
+  useEffect(() => {
+    if (mode !== 'focus') return;
+    const onKey = (e) => {
+      if (e.key === 'ArrowRight') setFocusIndex(i => Math.min(i + 1, emails.length - 1));
+      if (e.key === 'ArrowLeft') setFocusIndex(i => Math.max(0, i - 1));
+      if (e.key === 'Escape') changeMode('queue');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mode, emails.length, changeMode]);
 
   // Actions
   const patchTriage = async (id, patch) => {
@@ -179,6 +194,18 @@ export default function TriagePage() {
               onCreateTask={onCreateTask}
             />
           ))
+        ) : mode === 'focus' ? (
+          <FocusCard
+            email={emails[focusIndex]}
+            index={focusIndex}
+            total={emails.length}
+            onPrev={() => setFocusIndex(i => Math.max(0, i - 1))}
+            onNext={() => setFocusIndex(i => Math.min(i + 1, emails.length - 1))}
+            onDraftReply={onDraftReply}
+            onSnooze={onSnooze}
+            onDismiss={(email) => { onDismiss(email); setFocusIndex(i => Math.min(i, emails.length - 2)); }}
+            onMarkDone={(email) => { onMarkDone(email); setFocusIndex(i => Math.min(i, emails.length - 2)); }}
+          />
         ) : null}
       </main>
 
