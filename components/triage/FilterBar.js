@@ -6,6 +6,7 @@ export default function FilterBar({ filters, onChange, onAnalyze, analyzing }) {
   return (
     <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-slate-50 dark:bg-neutral-950 border-b border-slate-200 dark:border-neutral-800">
       <select
+        aria-label="Filter by priority"
         value={filters.priority}
         onChange={e => set({ priority: e.target.value })}
         className="text-xs bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded px-2 py-1"
@@ -16,12 +17,14 @@ export default function FilterBar({ filters, onChange, onAnalyze, analyzing }) {
         <option value="low">Low only</option>
       </select>
       <input
+        aria-label="Filter by sender"
         value={filters.sender}
         onChange={e => set({ sender: e.target.value })}
         placeholder="Filter by sender"
         className="text-xs bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded px-2 py-1 w-40"
       />
       <select
+        aria-label="Filter by wait time"
         value={filters.minWaitDays}
         onChange={e => set({ minWaitDays: Number(e.target.value) })}
         className="text-xs bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded px-2 py-1"

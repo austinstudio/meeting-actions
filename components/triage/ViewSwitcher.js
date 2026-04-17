@@ -9,7 +9,7 @@ const MODES = [
 
 export default function ViewSwitcher({ mode, onChange }) {
   return (
-    <div className="inline-flex bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-md overflow-hidden text-sm">
+    <div role="group" aria-label="View mode" className="inline-flex bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-md overflow-hidden text-sm">
       {MODES.map(({ key, label, Icon }) => {
         const active = mode === key;
         return (
