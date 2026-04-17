@@ -106,11 +106,14 @@ export default function TriagePage() {
     const onKey = (e) => {
       if (e.key === 'ArrowRight') setFocusIndex(i => Math.min(i + 1, emails.length - 1));
       if (e.key === 'ArrowLeft') setFocusIndex(i => Math.max(0, i - 1));
-      if (e.key === 'Escape') changeMode('queue');
+      if (e.key === 'Escape') {
+        setMode('queue');
+        updateUrl({ mode: 'queue', filters });
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [mode, emails.length, changeMode]);
+  }, [mode, emails.length, updateUrl, filters]);
 
   // Actions
   const patchTriage = async (id, patch) => {
