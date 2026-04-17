@@ -92,7 +92,8 @@ export default async function handler(req, res) {
     for (const email of emails) {
       if (!email.outlook_id) continue;
       const existing = triageMap[email.outlook_id];
-      if (mode === 'unanalyzed' && existing?.analyzedAt) { skipped += 1; continue; }
+      const previouslySucceeded = existing?.analyzedAt && existing?.insight && !existing.insight.startsWith('Analysis failed');
+      if (mode === 'unanalyzed' && previouslySucceeded) { skipped += 1; continue; }
 
       try {
         const c = await classifyEmail(email);
@@ -122,7 +123,7 @@ export default async function handler(req, res) {
           ...(existing || {}),
           outlookId: email.outlook_id,
           insight: 'Analysis failed — retry Re-analyze.',
-          analyzedAt: new Date().toISOString()
+          analyzedAt: null
         };
         errors += 1;
       }
