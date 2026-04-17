@@ -34,3 +34,6 @@ coverage
 
 # Claude Code
 .claude
+
+# Brainstorming mockups (local only)
+.superpowers/
