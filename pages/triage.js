@@ -274,6 +274,7 @@ export default function TriagePage() {
         <nav className="hidden md:flex items-center gap-3 text-sm text-slate-600 dark:text-neutral-400 ml-4">
           <a href="/" className="hover:text-slate-900 dark:hover:text-white">Tasks</a>
           <a href="/contacts" className="hover:text-slate-900 dark:hover:text-white">Contacts</a>
+          <a href="/triage/ignored" className="hover:text-slate-900 dark:hover:text-white">Ignored</a>
           <button onClick={() => signOut()} className="hover:text-slate-900 dark:hover:text-white flex items-center gap-1">
             <LogOut size={14} /> Sign out
           </button>
