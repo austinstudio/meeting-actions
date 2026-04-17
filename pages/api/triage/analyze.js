@@ -77,6 +77,7 @@ export default async function handler(req, res) {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     let analyzed = 0, skipped = 0, errors = 0;
+    const errorSamples = [];
     for (const email of emails) {
       const existing = triageMap[email.outlook_id];
       if (mode === 'unanalyzed' && existing?.analyzedAt) { skipped += 1; continue; }
@@ -101,7 +102,9 @@ export default async function handler(req, res) {
         };
         analyzed += 1;
       } catch (err) {
-        console.error('classify error for', email.outlook_id, err?.message || err);
+        const msg = err?.message || String(err);
+        console.error('classify error for', email.outlook_id, msg);
+        if (errorSamples.length < 3) errorSamples.push(msg);
         triageMap[email.outlook_id] = {
           ...DEFAULT_TRIAGE,
           ...(existing || {}),
@@ -114,7 +117,7 @@ export default async function handler(req, res) {
     }
 
     await kv.set(triageKey, triageMap);
-    return res.status(200).json({ analyzed, skipped, errors });
+    return res.status(200).json({ analyzed, skipped, errors, errorSamples });
   } catch (error) {
     console.error('POST /api/triage/analyze error:', error);
     return res.status(500).json({ error: 'Failed to analyze' });
