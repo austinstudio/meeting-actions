@@ -21,7 +21,7 @@ export default function SnoozeMenu({ email, onPick, onClose }) {
             <input type="date" value={custom} onChange={e => setCustom(e.target.value)} className="flex-1 text-sm bg-slate-50 dark:bg-neutral-800 rounded px-2 py-1.5" />
             <button
               disabled={!custom}
-              onClick={() => pick(new Date(custom))}
+              onClick={() => pick(new Date(custom + 'T23:59:59'))}
               className="text-sm bg-indigo-600 dark:bg-orange-500 text-white rounded px-3 py-1.5 disabled:opacity-50"
             >Pick</button>
           </div>

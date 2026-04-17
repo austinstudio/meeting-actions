@@ -4,7 +4,6 @@ import { useRouter } from 'next/router';
 import {
   Mail, LogOut, Sun, Moon, Monitor, Menu, CheckCircle2
 } from 'lucide-react';
-import { APP_VERSION, getAllFeatures } from '../lib/features';
 import ViewSwitcher from '../components/triage/ViewSwitcher';
 import FilterBar from '../components/triage/FilterBar';
 import AnalyzeProgressBar from '../components/triage/AnalyzeProgressBar';
@@ -13,7 +12,6 @@ import FocusCard from '../components/triage/FocusCard';
 import BoardColumn from '../components/triage/BoardColumn';
 import SnoozeMenu from '../components/triage/SnoozeMenu';
 import DraftReplyModal from '../components/triage/DraftReplyModal';
-import WhatsNewModal from '../components/ui/WhatsNewModal';
 
 export default function TriagePage() {
   const { data: session, status } = useSession();
@@ -29,9 +27,6 @@ export default function TriagePage() {
   const [snoozeTarget, setSnoozeTarget] = useState(null);
   const [draftTarget, setDraftTarget] = useState(null);
   const [focusIndex, setFocusIndex] = useState(0);
-  const [theme, setTheme] = useState('system');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   // Auth redirect
   useEffect(() => {
