@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     if (!email) return res.status(404).json({ error: 'Email not found' });
 
     const userName = await getUserName(req, res);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const prompt = `You are drafting a reply to the email below on behalf of ${userName}.
 
