@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
-import { Calendar, Clock, CheckCircle2, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, Pencil, Search, Sparkles, Bell, History, Sun, Moon, Monitor, Tag, Rows3, Rows4, LayoutList, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, Gift, Bot, Github, Unlink } from 'lucide-react';
+import { Calendar, Clock, CheckCircle2, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, Pencil, Search, Sparkles, Bell, History, Sun, Moon, Monitor, Tag, Rows3, Rows4, LayoutList, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, Gift, Bot, Github, Unlink, Mail } from 'lucide-react';
 import { APP_VERSION, FEATURES, getNewFeatures, getAllFeatures } from '../lib/features';
 
 import { DEFAULT_COLUMNS, COLUMN_COLORS, priorityColors, PREDEFINED_TAGS, isCurrentUser } from '../components/constants';
@@ -1215,6 +1215,15 @@ export default function MeetingKanban() {
                 <Users size={16} />
               </a>
 
+              {/* Follow-ups Link */}
+              <a
+                href="/triage"
+                className="w-10 h-10 flex items-center justify-center text-slate-500 dark:text-neutral-400 hover:text-indigo-600 dark:hover:text-orange-500 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                title="Follow-ups"
+              >
+                <Mail size={16} />
+              </a>
+
               {/* Divider */}
               <div className="w-8 h-px bg-slate-200 dark:bg-neutral-800 my-1" />
 
@@ -1280,6 +1289,14 @@ export default function MeetingKanban() {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <Users size={16} />
+                  </a>
+                  <a
+                    href="/triage"
+                    className="p-1.5 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-orange-500 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+                    title="Follow-ups"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Mail size={16} />
                   </a>
                   <div className="flex-1" />
                   <button

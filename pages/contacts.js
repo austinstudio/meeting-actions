@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import {
   Users, Plus, Search, X, LogOut, Sun, Moon, Monitor,
   CheckCircle2, Menu, ArrowUpDown, Filter, Download,
-  Gift, Github, Unlink
+  Gift, Github, Unlink, Mail
 } from 'lucide-react';
 import { APP_VERSION, getAllFeatures } from '../lib/features';
 import ContactCard from '../components/contact/ContactCard';
@@ -370,6 +370,13 @@ export default function ContactsPage() {
             >
               <Users size={18} />
             </div>
+            <a
+              href="/triage"
+              className="w-10 h-10 flex items-center justify-center text-slate-500 dark:text-neutral-400 hover:text-indigo-600 dark:hover:text-orange-500 hover:bg-slate-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+              title="Follow-ups"
+            >
+              <Mail size={18} />
+            </a>
             <div className="md:hidden mt-auto flex flex-col gap-2 items-center">
               {[
                 { id: 'light', icon: Sun },
