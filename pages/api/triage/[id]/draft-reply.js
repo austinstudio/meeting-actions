@@ -41,7 +41,7 @@ From: ${email.sender_name || ''} <${email.sender_email || ''}>
 Subject: ${email.subject || ''}
 Sent: ${email.sent_at || ''}
 
-${email.body || ''}
+${bodySnippet(email.body, 3000)}
 
 Draft reply:`;
 
