@@ -26,6 +26,17 @@ Rules:
 - needsFollowUp is TRUE only when the user (recipient) owes a reply or action.
 - Keep insight concrete — reference the actual content.`;
 
+function extractJson(raw) {
+  const cleaned = raw.trim().replace(/^```json\s*|^```\s*|\s*```$/g, '').trim();
+  try { return JSON.parse(cleaned); } catch {}
+  const first = cleaned.indexOf('{');
+  const last = cleaned.lastIndexOf('}');
+  if (first >= 0 && last > first) {
+    return JSON.parse(cleaned.slice(first, last + 1));
+  }
+  throw new Error(`Could not parse JSON. Raw response: ${cleaned.slice(0, 300)}`);
+}
+
 async function classifyEmail(model, email) {
   const input = {
     today: new Date().toISOString().slice(0, 10),
@@ -38,9 +49,7 @@ async function classifyEmail(model, email) {
   };
   const prompt = `${CLASSIFY_PROMPT}\n\nEmail JSON:\n${JSON.stringify(input, null, 2)}`;
   const result = await model.generateContent(prompt);
-  const text = result.response.text().trim().replace(/^```json\s*|\s*```$/g, '');
-  const parsed = JSON.parse(text);
-  return parsed;
+  return extractJson(result.response.text());
 }
 
 export default async function handler(req, res) {
@@ -65,7 +74,7 @@ export default async function handler(req, res) {
     const triageKey = `email-triage:${userId}`;
     const triageMap = (await kv.get(triageKey)) || {};
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     let analyzed = 0, skipped = 0, errors = 0;
     for (const email of emails) {
@@ -92,7 +101,7 @@ export default async function handler(req, res) {
         };
         analyzed += 1;
       } catch (err) {
-        console.error('classify error for', email.outlook_id, err);
+        console.error('classify error for', email.outlook_id, err?.message || err);
         triageMap[email.outlook_id] = {
           ...DEFAULT_TRIAGE,
           ...(existing || {}),
