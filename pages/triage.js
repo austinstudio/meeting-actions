@@ -10,6 +10,7 @@ import FilterBar from '../components/triage/FilterBar';
 import AnalyzeProgressBar from '../components/triage/AnalyzeProgressBar';
 import TriageCard from '../components/triage/TriageCard';
 import FocusCard from '../components/triage/FocusCard';
+import BoardColumn from '../components/triage/BoardColumn';
 import SnoozeMenu from '../components/triage/SnoozeMenu';
 import DraftReplyModal from '../components/triage/DraftReplyModal';
 import WhatsNewModal from '../components/ui/WhatsNewModal';
@@ -96,6 +97,15 @@ export default function TriagePage() {
 
   useEffect(() => { setFocusIndex(0); }, [mode, emails.length]);
 
+  const board = useMemo(() => {
+    const cols = { needs_reply: [], waiting_on: [], fyi_only: [], done: [] };
+    for (const e of emails) {
+      const s = e.triage?.triageState || 'fyi_only';
+      if (cols[s]) cols[s].push(e);
+    }
+    return cols;
+  }, [emails]);
+
   useEffect(() => {
     if (mode !== 'focus') return;
     const onKey = (e) => {
@@ -177,7 +187,7 @@ export default function TriagePage() {
       <FilterBar filters={filters} onChange={changeFilters} onAnalyze={handleAnalyze} analyzing={analyzing} />
       <AnalyzeProgressBar result={analyzeResult} onDismiss={() => setAnalyzeResult(null)} />
 
-      <main className="max-w-3xl mx-auto p-4">
+      <main className={`p-4 ${mode === 'board' ? '' : 'max-w-3xl mx-auto'}`}>
         {loading ? (
           <div className="text-sm text-slate-500 dark:text-neutral-400">Loading…</div>
         ) : emails.length === 0 ? (
@@ -206,6 +216,17 @@ export default function TriagePage() {
             onDismiss={(email) => { onDismiss(email); setFocusIndex(i => Math.min(i, emails.length - 2)); }}
             onMarkDone={(email) => { onMarkDone(email); setFocusIndex(i => Math.min(i, emails.length - 2)); }}
           />
+        ) : mode === 'board' ? (
+          <div className="max-w-6xl mx-auto flex gap-3">
+            {(['needs_reply', 'waiting_on', 'fyi_only', 'done']).map(state => (
+              <BoardColumn
+                key={state}
+                state={state}
+                emails={board[state]}
+                onDrop={(outlookId, nextState) => patchTriage(outlookId, { triageState: nextState })}
+              />
+            ))}
+          </div>
         ) : null}
       </main>
 
