@@ -144,14 +144,30 @@ export default function TriagePage() {
   const handleAnalyze = async () => {
     setAnalyzing(true);
     setAnalyzeResult(null);
+    const BATCH = 50;
+    const MAX_BATCHES = 30;
+    const totals = { analyzed: 0, skipped: 0, errors: 0, errorSamples: [], remaining: 0 };
     try {
-      const res = await fetch('/api/triage/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'unanalyzed' })
-      });
-      const data = await res.json();
-      setAnalyzeResult(data);
+      for (let i = 0; i < MAX_BATCHES; i++) {
+        const res = await fetch('/api/triage/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'unanalyzed', limit: BATCH })
+        });
+        const data = await res.json();
+        totals.analyzed += data.analyzed || 0;
+        totals.skipped = data.skipped || 0;
+        totals.errors += data.errors || 0;
+        totals.remaining = data.remaining || 0;
+        if (data.errorSamples?.length) {
+          for (const s of data.errorSamples) {
+            if (totals.errorSamples.length < 3) totals.errorSamples.push(s);
+          }
+        }
+        setAnalyzeResult({ ...totals });
+        if (totals.remaining === 0) break;
+        if ((data.analyzed || 0) + (data.errors || 0) === 0) break; // no progress, stop
+      }
       load();
     } catch (err) {
       setAnalyzeResult({ analyzed: 0, skipped: 0, errors: 1 });

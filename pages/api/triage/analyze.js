@@ -74,11 +74,12 @@ export default async function handler(req, res) {
   const userId = await requireAuth(req, res);
   if (!userId) return;
 
-  const { mode = 'unanalyzed' } = req.body || {};
+  const { mode = 'unanalyzed', limit = 50 } = req.body || {};
+  const batchSize = Math.max(1, Math.min(Number(limit) || 50, 100));
 
   try {
     const ids = await kv.zrange('emails:by_date', 0, -1, { rev: true });
-    if (!ids || ids.length === 0) return res.status(200).json({ analyzed: 0, skipped: 0, errors: 0 });
+    if (!ids || ids.length === 0) return res.status(200).json({ analyzed: 0, skipped: 0, errors: 0, remaining: 0 });
 
     const keys = ids.map(id => `email:${id}`);
     const emails = (await kv.mget(...keys)).filter(Boolean);
@@ -86,7 +87,7 @@ export default async function handler(req, res) {
     const triageKey = `email-triage:${userId}`;
     const triageMap = (await kv.get(triageKey)) || {};
 
-    let analyzed = 0, skipped = 0, errors = 0;
+    let analyzed = 0, skipped = 0, errors = 0, processed = 0, remaining = 0;
     const errorSamples = [];
 
     for (const email of emails) {
@@ -94,6 +95,9 @@ export default async function handler(req, res) {
       const existing = triageMap[email.outlook_id];
       const previouslySucceeded = existing?.analyzedAt && existing?.insight && !existing.insight.startsWith('Analysis failed');
       if (mode === 'unanalyzed' && previouslySucceeded) { skipped += 1; continue; }
+
+      if (processed >= batchSize) { remaining += 1; continue; }
+      processed += 1;
 
       try {
         const c = await classifyEmail(email);
@@ -130,7 +134,7 @@ export default async function handler(req, res) {
     }
 
     await kv.set(triageKey, triageMap);
-    return res.status(200).json({ analyzed, skipped, errors, errorSamples });
+    return res.status(200).json({ analyzed, skipped, errors, errorSamples, remaining });
   } catch (error) {
     console.error('POST /api/triage/analyze error:', error);
     return res.status(500).json({ error: error?.message || 'Failed to analyze' });
