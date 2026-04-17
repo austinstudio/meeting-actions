@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Paperclip, Clock, CheckCircle2, Archive, X, ListPlus, User, UserPlus } from 'lucide-react';
+import { Sparkles, Paperclip, Clock, CheckCircle2, Archive, X, ListPlus, User, UserPlus, Ban } from 'lucide-react';
 import { bodySnippet, waitingDays } from '../../lib/triage-utils';
 
 const PRIORITY_STYLES = {
@@ -8,7 +8,7 @@ const PRIORITY_STYLES = {
   low:    { border: 'border-l-slate-400',  badge: 'bg-slate-100 text-slate-700 dark:bg-neutral-800 dark:text-neutral-300' }
 };
 
-export default function TriageCard({ email, contact, onDraftReply, onSnooze, onCreateTask, onDismiss, onMarkDone, onAddContact }) {
+export default function TriageCard({ email, contact, onDraftReply, onSnooze, onCreateTask, onDismiss, onMarkDone, onAddContact, onIgnore }) {
   const t = email.triage || {};
   const style = PRIORITY_STYLES[t.priority] || PRIORITY_STYLES.low;
   const days = waitingDays(email);
@@ -96,6 +96,11 @@ export default function TriageCard({ email, contact, onDraftReply, onSnooze, onC
         <button onClick={() => onDismiss(email)} className="text-[11px] bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded px-3 py-1 text-slate-700 dark:text-neutral-200 flex items-center gap-1">
           <X size={11} /> Dismiss
         </button>
+        {onIgnore && (
+          <button onClick={() => onIgnore(email)} className="text-[11px] bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded px-3 py-1 text-slate-700 dark:text-neutral-200 flex items-center gap-1" title="Ignore future emails from this sender/domain">
+            <Ban size={11} /> Ignore
+          </button>
+        )}
       </div>
     </div>
   );

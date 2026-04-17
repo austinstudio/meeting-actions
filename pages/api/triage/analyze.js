@@ -5,6 +5,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { kv } from '@vercel/kv';
 import { requireAuth } from '../../../lib/auth';
 import { bodySnippet, DEFAULT_TRIAGE } from '../../../lib/triage-utils';
+import { shouldIgnore } from '../../../lib/triage-ignore';
 
 const client = new Anthropic();
 
@@ -86,13 +87,33 @@ export default async function handler(req, res) {
 
     const triageKey = `email-triage:${userId}`;
     const triageMap = (await kv.get(triageKey)) || {};
+    const ignoreList = (await kv.get(`email-ignore:${userId}`)) || [];
 
-    let analyzed = 0, skipped = 0, errors = 0, processed = 0, remaining = 0;
+    let analyzed = 0, skipped = 0, errors = 0, ignored = 0, processed = 0, remaining = 0;
     const errorSamples = [];
 
     for (const email of emails) {
       if (!email.outlook_id) continue;
       const existing = triageMap[email.outlook_id];
+
+      // Auto-dismiss senders on the ignore list — no AI call.
+      if (shouldIgnore(email.sender_email, ignoreList)) {
+        if (existing?.triageState !== 'dismissed') {
+          triageMap[email.outlook_id] = {
+            ...DEFAULT_TRIAGE,
+            ...(existing || {}),
+            outlookId: email.outlook_id,
+            triageState: 'dismissed',
+            insight: existing?.insight || 'Auto-dismissed: sender on ignore list.',
+            updatedAt: new Date().toISOString()
+          };
+          ignored += 1;
+        } else {
+          skipped += 1;
+        }
+        continue;
+      }
+
       const previouslySucceeded = existing?.analyzedAt && existing?.insight && !existing.insight.startsWith('Analysis failed');
       if (mode === 'unanalyzed' && previouslySucceeded) { skipped += 1; continue; }
 
@@ -134,7 +155,7 @@ export default async function handler(req, res) {
     }
 
     await kv.set(triageKey, triageMap);
-    return res.status(200).json({ analyzed, skipped, errors, errorSamples, remaining });
+    return res.status(200).json({ analyzed, skipped, errors, ignored, errorSamples, remaining });
   } catch (error) {
     console.error('POST /api/triage/analyze error:', error);
     return res.status(500).json({ error: error?.message || 'Failed to analyze' });

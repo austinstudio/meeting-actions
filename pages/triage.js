@@ -12,6 +12,7 @@ import FocusCard from '../components/triage/FocusCard';
 import BoardColumn from '../components/triage/BoardColumn';
 import SnoozeMenu from '../components/triage/SnoozeMenu';
 import DraftReplyModal from '../components/triage/DraftReplyModal';
+import IgnoreMenu from '../components/triage/IgnoreMenu';
 
 export default function TriagePage() {
   const { data: session, status } = useSession();
@@ -29,6 +30,7 @@ export default function TriagePage() {
   const [focusIndex, setFocusIndex] = useState(0);
   const [toast, setToast] = useState(null);
   const [contactsByEmail, setContactsByEmail] = useState({});
+  const [ignoreTarget, setIgnoreTarget] = useState(null);
 
   // Auth redirect
   useEffect(() => {
@@ -202,6 +204,28 @@ export default function TriagePage() {
     }
   };
 
+  const onIgnore = (email) => setIgnoreTarget(email);
+  const onPickIgnore = async ({ type, pattern }) => {
+    const target = ignoreTarget;
+    setIgnoreTarget(null);
+    try {
+      const res = await fetch('/api/triage/ignored', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, pattern, sweep: true })
+      });
+      if (!res.ok) throw new Error('Failed');
+      const { dismissed = 0 } = await res.json();
+      const label = type === 'domain' ? `@${pattern}` : pattern;
+      setToast({ kind: 'success', text: `Ignoring ${label}${dismissed ? ` · auto-dismissed ${dismissed}` : ''}` });
+      setTimeout(() => setToast(null), 3000);
+      load();
+    } catch {
+      setToast({ kind: 'error', text: 'Failed to add to ignore list' });
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
+
   const onDraftReply = (email) => setDraftTarget(email);
   const onSnooze = (email) => setSnoozeTarget(email);
   const onPickSnooze = (email, iso) => { setSnoozeTarget(null); patchTriage(email.outlook_id, { snoozeUntil: iso }); };
@@ -276,6 +300,7 @@ export default function TriagePage() {
               onMarkDone={onMarkDone}
               onCreateTask={onCreateTask}
               onAddContact={onAddContact}
+              onIgnore={onIgnore}
             />
           ))
         ) : mode === 'focus' ? (
@@ -311,6 +336,9 @@ export default function TriagePage() {
       )}
       {draftTarget && (
         <DraftReplyModal email={draftTarget} onClose={() => setDraftTarget(null)} />
+      )}
+      {ignoreTarget && (
+        <IgnoreMenu email={ignoreTarget} onPick={onPickIgnore} onClose={() => setIgnoreTarget(null)} />
       )}
       {toast && (
         <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-md shadow-lg text-sm ${
