@@ -1,6 +1,6 @@
 import React from 'react';
 import { Sparkles, ChevronLeft, ChevronRight, CheckCircle2, X, Clock, Paperclip, User, UserPlus } from 'lucide-react';
-import { bodySnippet, waitingDays } from '../../lib/triage-utils';
+import { bodySnippet, waitingDays, recipientRole } from '../../lib/triage-utils';
 
 const BADGE = {
   high: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300',
@@ -8,8 +8,16 @@ const BADGE = {
   low: 'bg-slate-100 text-slate-700 dark:bg-neutral-800 dark:text-neutral-300'
 };
 
+const RECIPIENT_BADGE = {
+  direct:        'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  'direct-plus': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  cc:            'bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-300',
+  indirect:      'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  unknown:       'bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-300'
+};
+
 export default function FocusCard({
-  email, contact, index, total,
+  email, contact, userEmail, index, total,
   onPrev, onNext,
   onDraftReply, onSnooze, onDismiss, onMarkDone, onAddContact
 }) {
@@ -24,6 +32,7 @@ export default function FocusCard({
 
   const t = email.triage || {};
   const days = waitingDays(email);
+  const recip = recipientRole(email, userEmail);
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-4">
@@ -56,7 +65,22 @@ export default function FocusCard({
           <span>·</span>
           <span className="flex items-center gap-1"><Clock size={11} /> {days}d ago</span>
           {email.has_attachments && <span className="flex items-center gap-1"><Paperclip size={11} /> {email.attachment_count}</span>}
+          {recip.label && (
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${RECIPIENT_BADGE[recip.role]}`}>
+              {recip.label}
+            </span>
+          )}
         </div>
+        {(recip.toList.length > 0 || recip.ccList.length > 0) && (
+          <div className="text-[10px] text-slate-500 dark:text-neutral-500 mt-1 space-y-0.5">
+            {recip.toList.length > 0 && (
+              <div><strong>To:</strong> {recip.toList.slice(0, 5).join(', ')}{recip.toList.length > 5 ? ` +${recip.toList.length - 5}` : ''}</div>
+            )}
+            {recip.ccList.length > 0 && (
+              <div><strong>CC:</strong> {recip.ccList.slice(0, 5).join(', ')}{recip.ccList.length > 5 ? ` +${recip.ccList.length - 5}` : ''}</div>
+            )}
+          </div>
+        )}
 
         <div className="text-sm text-slate-700 dark:text-neutral-300 mt-3 leading-relaxed border-l-2 border-slate-200 dark:border-neutral-700 pl-3 max-h-48 overflow-auto">
           {bodySnippet(email.body, 1200)}

@@ -17,6 +17,7 @@ import IgnoreMenu from '../components/triage/IgnoreMenu';
 export default function TriagePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const userEmail = session?.user?.email || '';
 
   const [emails, setEmails] = useState([]);
   const [stats, setStats] = useState({ total: 0, analyzed: 0, needsReply: 0, waitingOn: 0, fyiOnly: 0, done: 0 });
@@ -295,6 +296,7 @@ export default function TriagePage() {
               key={email.outlook_id}
               email={email}
               contact={contactsByEmail[(email.sender_email || '').toLowerCase()] || null}
+              userEmail={userEmail}
               onDraftReply={onDraftReply}
               onSnooze={onSnooze}
               onDismiss={onDismiss}
@@ -308,6 +310,7 @@ export default function TriagePage() {
           <FocusCard
             email={emails[focusIndex]}
             contact={emails[focusIndex] ? contactsByEmail[(emails[focusIndex].sender_email || '').toLowerCase()] || null : null}
+            userEmail={userEmail}
             index={focusIndex}
             total={emails.length}
             onPrev={() => setFocusIndex(i => Math.max(0, i - 1))}

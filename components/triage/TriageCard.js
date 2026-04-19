@@ -1,6 +1,6 @@
 import React from 'react';
 import { Sparkles, Paperclip, Clock, CheckCircle2, Archive, X, ListPlus, User, UserPlus, Ban } from 'lucide-react';
-import { bodySnippet, waitingDays } from '../../lib/triage-utils';
+import { bodySnippet, waitingDays, recipientRole } from '../../lib/triage-utils';
 
 const PRIORITY_STYLES = {
   high:   { border: 'border-l-red-600',    badge: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300' },
@@ -8,15 +8,19 @@ const PRIORITY_STYLES = {
   low:    { border: 'border-l-slate-400',  badge: 'bg-slate-100 text-slate-700 dark:bg-neutral-800 dark:text-neutral-300' }
 };
 
-export default function TriageCard({ email, contact, onDraftReply, onSnooze, onCreateTask, onDismiss, onMarkDone, onAddContact, onIgnore }) {
+const RECIPIENT_BADGE = {
+  direct:      'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  'direct-plus': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  cc:          'bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-300',
+  indirect:    'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  unknown:     'bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-300'
+};
+
+export default function TriageCard({ email, contact, userEmail, onDraftReply, onSnooze, onCreateTask, onDismiss, onMarkDone, onAddContact, onIgnore }) {
   const t = email.triage || {};
   const style = PRIORITY_STYLES[t.priority] || PRIORITY_STYLES.low;
   const days = waitingDays(email);
-  const recips = [
-    ...(email.to || []).slice(0, 2),
-    ...(email.cc || []).slice(0, 1)
-  ];
-  const extraCount = (email.to?.length || 0) + (email.cc?.length || 0) - recips.length;
+  const recip = recipientRole(email, userEmail);
 
   return (
     <div className={`bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 border-l-4 ${style.border} rounded-md p-4 mb-3`}>
@@ -59,8 +63,22 @@ export default function TriageCard({ email, contact, onDraftReply, onSnooze, onC
             <UserPlus size={9} /> Add contact
           </button>
         ) : null}
-        {recips.length > 0 && <span>→ {recips.join(', ')}{extraCount > 0 ? `, +${extraCount}` : ''}</span>}
+        {recip.label && (
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${RECIPIENT_BADGE[recip.role]}`}>
+            {recip.label}
+          </span>
+        )}
       </div>
+      {(recip.toList.length > 0 || recip.ccList.length > 0) && (
+        <div className="text-[10px] text-slate-500 dark:text-neutral-500 mt-0.5 space-y-0.5">
+          {recip.toList.length > 0 && (
+            <div><strong>To:</strong> {recip.toList.slice(0, 4).join(', ')}{recip.toList.length > 4 ? ` +${recip.toList.length - 4}` : ''}</div>
+          )}
+          {recip.ccList.length > 0 && (
+            <div><strong>CC:</strong> {recip.ccList.slice(0, 4).join(', ')}{recip.ccList.length > 4 ? ` +${recip.ccList.length - 4}` : ''}</div>
+          )}
+        </div>
+      )}
 
       <div className="text-[11px] text-slate-700 dark:text-neutral-300 mt-2 leading-relaxed border-l-2 border-slate-200 dark:border-neutral-700 pl-2">
         {bodySnippet(email.body, 220)}
