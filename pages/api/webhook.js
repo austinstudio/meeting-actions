@@ -299,7 +299,7 @@ export default async function handler(req, res) {
       }
 
       // Call Gemini to extract action items
-      const model = genAI.getGenerativeModel({ model: 'gemini-pro-latest' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
       const result = await model.generateContent(EXTRACTION_PROMPT + glossaryPrompt + '\n' + transcript);
       const response = await result.response;

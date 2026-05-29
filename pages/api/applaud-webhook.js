@@ -211,7 +211,7 @@ export default async function handler(req, res) {
   // Run Gemini extraction
   let extracted;
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro-latest' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
     const result = await model.generateContent(
       getExtractionPrompt() + glossaryPrompt + '\n' + transcriptText
     );
