@@ -537,16 +537,15 @@ export default function EditTaskModal({ isOpen, task, onClose, onSave, columns, 
                             });
                             const data = await response.json();
                             if (data.success) {
-                              setFormData({
-                                ...formData,
-                                githubIssueUrl: data.issueUrl,
-                                githubIssueNumber: data.issueNumber,
-                              });
+                              // Persist the link to the task, then close the modal
+                              // immediately so the user sees the in-progress overlay
+                              // on the kanban card without having to save/close manually.
                               await onSave(task.id, {
                                 ...formData,
                                 githubIssueUrl: data.issueUrl,
                                 githubIssueNumber: data.issueNumber,
                               });
+                              onClose();
                             } else {
                               alert('Failed to create issue: ' + (data.error || 'Unknown error'));
                             }
