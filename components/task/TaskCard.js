@@ -156,7 +156,7 @@ export default function TaskCard({ task, meeting, onDelete, onEdit, isTrashView,
 
   return (
     <div
-      draggable={!isTrashView}
+      draggable={!isTrashView && !isAutoImplementing}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDoubleClick={() => !isTrashView && onEdit(task)}
