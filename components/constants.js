@@ -7,14 +7,14 @@ export const DEFAULT_COLUMNS = [
 ];
 
 export const COLUMN_COLORS = {
-  slate: { bg: 'bg-slate-200', accent: 'border-slate-500', badge: 'bg-slate-300' },
-  blue: { bg: 'bg-blue-200', accent: 'border-blue-500', badge: 'bg-blue-300' },
-  amber: { bg: 'bg-amber-200', accent: 'border-amber-500', badge: 'bg-amber-300' },
-  emerald: { bg: 'bg-emerald-200', accent: 'border-emerald-500', badge: 'bg-emerald-300' },
-  purple: { bg: 'bg-purple-200', accent: 'border-purple-500', badge: 'bg-purple-300' },
-  rose: { bg: 'bg-rose-200', accent: 'border-rose-500', badge: 'bg-rose-300' },
-  indigo: { bg: 'bg-indigo-200', accent: 'border-indigo-500', badge: 'bg-indigo-300' },
-  teal: { bg: 'bg-teal-200', accent: 'border-teal-500', badge: 'bg-teal-300' },
+  slate: { bg: 'bg-slate-100', header: 'bg-slate-500', accent: 'border-slate-500', badge: 'bg-white/20' },
+  blue: { bg: 'bg-blue-100', header: 'bg-blue-500', accent: 'border-blue-500', badge: 'bg-white/20' },
+  amber: { bg: 'bg-amber-100', header: 'bg-amber-500', accent: 'border-amber-500', badge: 'bg-white/20' },
+  emerald: { bg: 'bg-emerald-100', header: 'bg-emerald-500', accent: 'border-emerald-500', badge: 'bg-white/20' },
+  purple: { bg: 'bg-purple-100', header: 'bg-purple-500', accent: 'border-purple-500', badge: 'bg-white/20' },
+  rose: { bg: 'bg-rose-100', header: 'bg-rose-500', accent: 'border-rose-500', badge: 'bg-white/20' },
+  indigo: { bg: 'bg-indigo-100', header: 'bg-indigo-500', accent: 'border-indigo-500', badge: 'bg-white/20' },
+  teal: { bg: 'bg-teal-100', header: 'bg-teal-500', accent: 'border-teal-500', badge: 'bg-white/20' },
 };
 
 export const priorityColors = {
