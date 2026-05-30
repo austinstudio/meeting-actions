@@ -18,7 +18,7 @@ const anthropic = new AnthropicBedrock({
   awsRegion: process.env.AWS_REGION || 'us-east-1',
 });
 
-const MODEL = 'us.anthropic.claude-opus-4-8';
+const MODEL = 'us.anthropic.claude-opus-4-5-20251101-v1:0';
 
 // Get all JS files in a directory recursively
 function getJsFiles(dir, baseDir = dir) {
