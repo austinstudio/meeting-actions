@@ -258,6 +258,39 @@ export default function MeetingKanban() {
     fetchData();
   }, []);
 
+  // Background refresh while at least one task has a GitHub issue that
+  // hasn't been resolved yet. Polls the lightweight webhook endpoint every
+  // 8s and silently updates `tasks`. React's reconciliation only re-renders
+  // cards that actually changed (e.g., status moved to 'done', or
+  // githubResolution stamped on it). Interval clears automatically when no
+  // tasks are pending so we're not polling forever.
+  const hasPendingAutoImplement = tasks.some(
+    t => t.githubIssueNumber && !t.githubResolution
+  );
+
+  useEffect(() => {
+    if (!hasPendingAutoImplement) return;
+
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/webhook');
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        if (cancelled) return;
+        if (Array.isArray(data.tasks)) setTasks(data.tasks);
+        if (Array.isArray(data.meetings)) setMeetings(data.meetings);
+      } catch (err) {
+        console.error('Background refresh failed:', err);
+      }
+    }, 8000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [hasPendingAutoImplement]);
+
   // Check for new features on mount
   useEffect(() => {
     const checkNewFeatures = async () => {

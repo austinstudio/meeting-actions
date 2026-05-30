@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Clock, CheckCircle2, ArrowRight, Trash2, Pencil, Pin, X, RotateCcw, Github, AlertTriangle, Package } from 'lucide-react';
+import { User, Clock, CheckCircle2, ArrowRight, Trash2, Pencil, Pin, X, RotateCcw, RefreshCw, Github, AlertTriangle, Package } from 'lucide-react';
 import { priorityColors, TAG_COLORS, isCurrentUser } from '../constants';
 
 export function GithubResolutionBadge({ task }) {
@@ -131,6 +131,10 @@ export default function TaskCard({ task, meeting, onDelete, onEdit, isTrashView,
   const [expandContext, setExpandContext] = useState(false);
   const [expandSubtasks, setExpandSubtasks] = useState(false);
 
+  // Active auto-implement state: a GitHub issue exists but the bot hasn't
+  // reported a resolution yet. Drives the overlay below.
+  const isAutoImplementing = task.githubIssueNumber && !task.githubResolution;
+
   const handleDragStart = (e) => {
     if (isTrashView) {
       e.preventDefault();
@@ -168,6 +172,17 @@ export default function TaskCard({ task, meeting, onDelete, onEdit, isTrashView,
       {task.pinned && (
         <div className="absolute -top-2 -left-2 w-5 h-5 bg-orange-400 dark:bg-orange-500 rounded-full flex items-center justify-center shadow-sm">
           <Pin size={10} className="text-white transform rotate-45" />
+        </div>
+      )}
+
+      {isAutoImplementing && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/70 dark:bg-neutral-900/70 backdrop-blur-sm rounded-lg z-10">
+          <div className="flex flex-col items-center gap-1.5 px-3 text-center">
+            <RefreshCw className="animate-spin text-indigo-500 dark:text-orange-500" size={22} />
+            <span className="text-xs font-semibold text-slate-700 dark:text-neutral-200">
+              Auto-implementing #{task.githubIssueNumber}…
+            </span>
+          </div>
         </div>
       )}
 
