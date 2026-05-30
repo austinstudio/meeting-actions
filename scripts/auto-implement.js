@@ -18,7 +18,7 @@ const anthropic = new AnthropicBedrock({
   awsRegion: process.env.AWS_REGION || 'us-east-1',
 });
 
-const MODEL = 'us.anthropic.claude-opus-4-20250514-v1:0';
+const MODEL = 'us.anthropic.claude-opus-4-8';
 
 // Get all JS files in a directory recursively
 function getJsFiles(dir, baseDir = dir) {
@@ -60,13 +60,13 @@ function readFileSafely(filePath) {
 }
 
 // Stream a message from Claude with extended thinking
-async function streamMessage(messages, system, useThinking = true) {
+async function streamMessage(messages, system, useThinking = true, maxTokens = 16000) {
   let responseText = '';
   let thinkingText = '';
 
   const options = {
     model: MODEL,
-    max_tokens: 16000,
+    max_tokens: maxTokens,
     messages,
     system,
   };
@@ -145,9 +145,6 @@ async function main() {
   const allFiles = getJsFiles(process.cwd());
   console.log(`Found ${allFiles.length} files in project`);
 
-  let fileContext = '';
-  const includedFiles = [];
-
   // Files to skip (not useful for code changes)
   const skipFiles = [
     'package-lock.json',
@@ -157,11 +154,87 @@ async function main() {
     '.env',
   ];
 
-  // Read ALL source files fully
-  for (const file of allFiles) {
-    if (skipFiles.some(skip => file.endsWith(skip))) continue;
-    if (file.includes('node_modules')) continue;
+  const candidateFiles = allFiles.filter(f =>
+    !skipFiles.some(skip => f.endsWith(skip)) && !f.includes('node_modules')
+  );
+  const fileListStr = candidateFiles.join('\n');
 
+  // ============================================================
+  // PASS 0: FILE SELECTION - Pick only the files relevant to this issue
+  // ============================================================
+  // Without this, we'd send the entire codebase (~700KB / 175K+ tokens) on
+  // every issue, which blows past the model's context limit and is wasteful.
+
+  const selectionSystemPrompt = `You are an expert software engineer reviewing a GitHub issue for a Next.js application called "Meeting Actions". Your job is to identify which files in the codebase are most likely needed to understand and implement this change.
+
+Guidelines:
+- Pick the 5-20 files most relevant to the issue.
+- Prefer files explicitly named in the issue, plus the components/pages/APIs that implement the feature or bug.
+- Include closely-related shared utilities or library files when they're likely to be edited or referenced.
+- Skip unrelated areas of the codebase, large docs/plans (.md files in docs/), and the auto-implement script itself.
+- File paths must exactly match entries from the provided file list.
+
+Respond with ONLY a JSON object in this format:
+{
+  "files": ["pages/foo.js", "components/bar/Baz.js"],
+  "reasoning": "Brief explanation of why these files were selected"
+}`;
+
+  const selectionUserPrompt = `## Issue #${issueNumber}: ${issueTitle}
+
+### Issue Type
+${isEnhancement ? 'Enhancement' : isBug ? 'Bug Fix' : 'Task'}
+
+### Issue Description
+${issueBody}
+
+---
+
+## Project Files
+\`\`\`
+${fileListStr}
+\`\`\`
+
+Select the files most likely needed to implement this change.`;
+
+  console.log('\n🔎 PASS 0: Selecting relevant files...');
+
+  let selectedFiles;
+  try {
+    const responseText = await streamMessage(
+      [{ role: 'user', content: selectionUserPrompt }],
+      selectionSystemPrompt,
+      false, // no extended thinking for the cheap selection pass
+      2000
+    );
+
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON found in file selection response');
+    const selection = JSON.parse(jsonMatch[0]);
+    const normalized = (selection.files || [])
+      .map(f => (typeof f === 'string' ? f.replace(/^\.\//, '') : ''))
+      .filter(f => candidateFiles.includes(f));
+
+    if (normalized.length === 0) {
+      console.warn('⚠️  Pass 0 returned no matching files - falling back to all candidate files');
+      selectedFiles = candidateFiles;
+    } else {
+      selectedFiles = normalized;
+      console.log(`📁 Selected ${selectedFiles.length} files:`);
+      selectedFiles.forEach(f => console.log(`   - ${f}`));
+      if (selection.reasoning) {
+        console.log(`💭 Reasoning: ${selection.reasoning}`);
+      }
+    }
+  } catch (error) {
+    console.warn(`⚠️  File selection failed (${error.message}) - falling back to all candidate files`);
+    selectedFiles = candidateFiles;
+  }
+
+  // Read selected files into context
+  let fileContext = '';
+  const includedFiles = [];
+  for (const file of selectedFiles) {
     const content = readFileSafely(file);
     if (content) {
       fileContext += `### ${file}\n\`\`\`\n${content}\n\`\`\`\n\n`;
@@ -169,9 +242,7 @@ async function main() {
     }
   }
 
-  console.log(`Including ${includedFiles.length} files in context`);
-
-  const fileListStr = allFiles.join('\n');
+  console.log(`Including ${includedFiles.length} files in context (${fileContext.length} chars)`);
 
   // ============================================================
   // PASS 1: ANALYSIS - Think through the problem before coding
