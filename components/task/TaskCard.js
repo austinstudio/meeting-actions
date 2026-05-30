@@ -1,6 +1,48 @@
 import React, { useState } from 'react';
-import { User, Clock, CheckCircle2, ArrowRight, Trash2, Pencil, Pin, X, RotateCcw } from 'lucide-react';
+import { User, Clock, CheckCircle2, ArrowRight, Trash2, Pencil, Pin, X, RotateCcw, Github, AlertTriangle, Package } from 'lucide-react';
 import { priorityColors, TAG_COLORS, isCurrentUser } from '../constants';
+
+export function GithubResolutionBadge({ task }) {
+  if (!task.githubIssueNumber) return null;
+
+  const resolution = task.githubResolution;
+  let Icon = Github;
+  let classes = 'bg-slate-100 text-slate-500 dark:bg-neutral-800 dark:text-neutral-400';
+  let label = `#${task.githubIssueNumber}`;
+  let title = `GitHub issue #${task.githubIssueNumber} — pending auto-implement`;
+
+  if (resolution?.outcome === 'success') {
+    Icon = CheckCircle2;
+    classes = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400';
+    label = `#${task.githubIssueNumber} fixed`;
+    title = resolution.summary || 'Auto-implemented successfully';
+  } else if (resolution?.outcome === 'failed') {
+    Icon = AlertTriangle;
+    classes = 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400';
+    label = `#${task.githubIssueNumber} failed`;
+    title = resolution.summary || 'Auto-implementation failed';
+  } else if (resolution?.outcome === 'needs_clarification') {
+    Icon = AlertTriangle;
+    classes = 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400';
+    label = `#${task.githubIssueNumber} ?`;
+    title = resolution.analysis || 'Bot needs clarification on this issue';
+  } else if (resolution?.outcome === 'needs_deps') {
+    Icon = Package;
+    classes = 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400';
+    label = `#${task.githubIssueNumber} deps`;
+    title = resolution.summary || 'Needs allow-deps label to proceed';
+  }
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full ${classes}`}
+      title={title}
+    >
+      <Icon size={10} />
+      <span>{label}</span>
+    </span>
+  );
+}
 
 export function TagBadge({ tag, onRemove, small = false }) {
   const tagKey = tag.toLowerCase();
@@ -261,10 +303,11 @@ export default function TaskCard({ task, meeting, onDelete, onEdit, isTrashView,
       </div>
 
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className={`text-xs px-2 py-0.5 rounded-full ${priorityColors[task.priority] || priorityColors['medium']}`}>
             {task.priority}
           </span>
+          <GithubResolutionBadge task={task} />
         </div>
         <DueDateBadge dueDate={task.dueDate} status={task.status} />
       </div>
