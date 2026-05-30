@@ -122,7 +122,7 @@ export default async function handler(req, res) {
     const userName = await getUserName(req, res);
 
     try {
-      const { status, priority, archived, column, task, owner, person, dueDate, context, type, tags, subtasks, pinned, order } = req.body;
+      const { status, priority, archived, column, task, owner, person, dueDate, context, type, tags, subtasks, pinned, order, githubIssueNumber, githubIssueUrl } = req.body;
 
       // Get current tasks from KV
       let tasks = await kv.get('tasks') || [];
@@ -214,6 +214,16 @@ export default async function handler(req, res) {
       // Handle order for drag reorder
       if (order !== undefined) {
         currentTask.order = order;
+      }
+
+      // GitHub issue link (set when a task creates an issue via the UI).
+      // No activity entry — these fields are set once and read by the
+      // auto-implement webhook to find the originating task.
+      if (githubIssueNumber !== undefined) {
+        currentTask.githubIssueNumber = githubIssueNumber;
+      }
+      if (githubIssueUrl !== undefined) {
+        currentTask.githubIssueUrl = githubIssueUrl;
       }
 
       // Add all changes to activity log

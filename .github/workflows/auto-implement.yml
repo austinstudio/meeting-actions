@@ -67,8 +67,10 @@ jobs:
           # Reset package files that may have been modified by npm install
           git checkout -- package.json package-lock.json 2>/dev/null || true
 
-          # Remove status file from staging
-          rm -f auto-implement-status.json
+          # NOTE: We do NOT delete auto-implement-status.json here — later steps
+          # need to read it for the comment summary and the Meeting Actions
+          # callback. The file is untracked and root-level, so it won't be
+          # picked up by the directory-scoped `git add` calls below.
 
           # Debug: Show what files changed after reset
           echo "=== Git status after reset ==="
