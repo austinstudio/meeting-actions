@@ -99,11 +99,11 @@ export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, 
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={(e) => handleDrop(e, columnTasks.length)}
-      className={`flex-1 min-w-[280px] max-w-[320px] rounded-xl ${colors.bg} dark:bg-opacity-[0.15] border-2 ${isDragOver ? colors.accent : 'border-transparent'} transition-colors ${isDraggingColumn ? 'opacity-50' : ''} flex flex-col h-full`}
+      className={`flex-1 min-w-[280px] max-w-[320px] rounded-xl ${colors.bg} dark:bg-neutral-900 border-2 ${isDragOver ? colors.accent : 'border-transparent'} transition-colors ${isDraggingColumn ? 'opacity-50' : ''} flex flex-col h-full`}
     >
-      <div className="p-3 border-b border-slate-200/50 dark:border-neutral-800/50 cursor-grab active:cursor-grabbing">
+      <div className={`p-3 rounded-t-xl ${colors.header} dark:bg-neutral-800 cursor-grab active:cursor-grabbing`}>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-slate-700 dark:text-slate-200 text-sm">{column.label}</h3>
+          <h3 className="font-semibold text-white dark:text-slate-200 text-sm">{column.label}</h3>
           <div className="flex items-center gap-1">
             {column.id === 'uncategorized' && onToggleMyTasksFilter && (
               <button
@@ -113,8 +113,8 @@ export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, 
                 }}
                 className={`p-1 rounded transition-colors ${
                   showOnlyMyTasks
-                    ? 'text-indigo-600 dark:text-orange-500 bg-indigo-100/50 dark:bg-orange-500/10'
-                    : 'text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-neutral-800/50'
+                    ? 'text-white bg-white/30 dark:text-orange-500 dark:bg-orange-500/10'
+                    : 'text-white/70 hover:text-white hover:bg-white/20 dark:text-neutral-500 dark:hover:text-neutral-300 dark:hover:bg-neutral-700/50'
                 }`}
                 title={showOnlyMyTasks ? 'Show all tasks' : 'Show only my tasks'}
               >
@@ -126,7 +126,7 @@ export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, 
                 e.stopPropagation();
                 onSortColumn(column.id);
               }}
-              className="p-1 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-neutral-800/50 rounded transition-colors"
+              className="p-1 text-white/70 hover:text-white hover:bg-white/20 dark:text-neutral-500 dark:hover:text-neutral-300 dark:hover:bg-neutral-700/50 rounded transition-colors"
               title="Sort tasks in this column"
             >
               <ArrowUpDown size={16} />
@@ -136,12 +136,12 @@ export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, 
                 e.stopPropagation();
                 onAddTask(column.id);
               }}
-              className="p-1 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-neutral-800/50 rounded transition-colors"
+              className="p-1 text-white/70 hover:text-white hover:bg-white/20 dark:text-neutral-500 dark:hover:text-neutral-300 dark:hover:bg-neutral-700/50 rounded transition-colors"
               title="Add task to this column"
             >
               <Plus size={16} />
             </button>
-            <span className={`text-xs ${colors.badge} dark:bg-opacity-30 text-slate-600 dark:text-neutral-300 px-2 py-0.5 rounded-full`}>
+            <span className={`text-xs ${colors.badge} text-white dark:bg-neutral-700 dark:text-neutral-300 px-2 py-0.5 rounded-full`}>
               {columnTasks.length}
             </span>
           </div>
