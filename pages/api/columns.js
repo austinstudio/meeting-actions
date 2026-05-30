@@ -30,15 +30,30 @@ export default async function handler(req, res) {
     try {
       let allColumns = await kv.get('columns') || [];
 
-      // Get user's custom columns (with their saved order)
+      // Get user's custom columns
       const userCustomColumns = allColumns.filter(c => c.custom && c.userId === userId);
 
       // Combine default columns with custom columns
-      // Custom columns have their order saved, defaults use their defined order
       let columns = [...DEFAULT_COLUMNS, ...userCustomColumns];
 
-      // Sort by order to respect saved positions
-      columns.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+      // Get user's saved column order
+      const allColumnOrders = await kv.get('columnOrders') || [];
+      const userOrder = allColumnOrders.find(o => o.userId === userId);
+
+      if (userOrder && userOrder.order) {
+        // Apply saved order - columns in the saved order come first, then any new columns
+        const orderMap = new Map(userOrder.order.map((id, idx) => [id, idx]));
+        columns.sort((a, b) => {
+          const orderA = orderMap.has(a.id) ? orderMap.get(a.id) : 999;
+          const orderB = orderMap.has(b.id) ? orderMap.get(b.id) : 999;
+          return orderA - orderB;
+        });
+        // Update order property to match sorted position
+        columns = columns.map((col, idx) => ({ ...col, order: idx }));
+      } else {
+        // No saved order - use default ordering
+        columns.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+      }
 
       return res.status(200).json({ columns });
     } catch (error) {
@@ -118,10 +133,28 @@ export default async function handler(req, res) {
 
       await kv.set('columns', allColumns);
 
-      // Return combined columns for user, sorted by order
+      // Save the column order for this user (array of column IDs in their new order)
+      const columnOrder = updatedColumns.sort((a, b) => a.order - b.order).map(c => c.id);
+      let allColumnOrders = await kv.get('columnOrders') || [];
+      const existingOrderIndex = allColumnOrders.findIndex(o => o.userId === userId);
+      const orderEntry = { userId, order: columnOrder, updatedAt: new Date().toISOString() };
+      if (existingOrderIndex >= 0) {
+        allColumnOrders[existingOrderIndex] = orderEntry;
+      } else {
+        allColumnOrders.push(orderEntry);
+      }
+      await kv.set('columnOrders', allColumnOrders);
+
+      // Return combined columns for user, sorted by the new order
       const userCustomColumns = allColumns.filter(c => c.custom && c.userId === userId);
       let columns = [...DEFAULT_COLUMNS, ...userCustomColumns];
-      columns.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+      const orderMap = new Map(columnOrder.map((id, idx) => [id, idx]));
+      columns.sort((a, b) => {
+        const orderA = orderMap.has(a.id) ? orderMap.get(a.id) : 999;
+        const orderB = orderMap.has(b.id) ? orderMap.get(b.id) : 999;
+        return orderA - orderB;
+      });
+      columns = columns.map((col, idx) => ({ ...col, order: idx }));
 
       return res.status(200).json({ success: true, columns });
     } catch (error) {
