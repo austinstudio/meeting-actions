@@ -53,7 +53,7 @@ export default function AddColumnModal({ isOpen, onClose, onSubmit }) {
                   key={c}
                   type="button"
                   onClick={() => setColor(c)}
-                  className={`w-8 h-8 rounded-full ${COLUMN_COLORS[c].bg} border-2 ${color === c ? 'border-indigo-500' : 'border-transparent'}`}
+                  className={`w-8 h-8 rounded-full ${COLUMN_COLORS[c].header} border-2 ${color === c ? 'border-indigo-500' : 'border-transparent'}`}
                 />
               ))}
             </div>
