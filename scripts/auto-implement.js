@@ -59,6 +59,44 @@ function readFileSafely(filePath) {
   return null;
 }
 
+// Find files that import any of the given target files via ES `import`/`export
+// ... from '...'` statements. Catches the "edited child, forgot parent" class
+// of bug where the bot changes a component's prop signature but doesn't update
+// the file that renders it.
+//
+// Matching is intentionally cheap (regex over the import-path tail). Index files
+// and Next.js dynamic-route files are excluded as sources because their basenames
+// ('index', '[id]', etc.) would over-match.
+function findImporters(targetFiles, candidateFiles) {
+  const escapeRegex = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const targetSet = new Set(targetFiles);
+
+  const targetBases = targetFiles
+    .map(t => path.basename(t).replace(/\.[^.]+$/, ''))
+    .filter(base => base && base.toLowerCase() !== 'index' && !base.startsWith('['));
+
+  if (targetBases.length === 0) return [];
+
+  const patterns = targetBases.map(base =>
+    new RegExp(
+      `(?:import|export)[^;\\n]*?from\\s+['"][^'"\\n]*?\\b${escapeRegex(base)}(?:\\.[a-z]+)?['"]`,
+      'm'
+    )
+  );
+
+  const importerSet = new Set();
+  for (const candidate of candidateFiles) {
+    if (targetSet.has(candidate)) continue;
+    const content = readFileSafely(candidate);
+    if (!content) continue;
+    if (patterns.some(p => p.test(content))) {
+      importerSet.add(candidate);
+    }
+  }
+
+  return [...importerSet];
+}
+
 // Stream a message from Claude with extended thinking
 async function streamMessage(messages, system, useThinking = true, maxTokens = 16000) {
   let responseText = '';
@@ -229,6 +267,19 @@ Select the files most likely needed to implement this change.`;
   } catch (error) {
     console.warn(`⚠️  File selection failed (${error.message}) - falling back to all candidate files`);
     selectedFiles = candidateFiles;
+  }
+
+  // Expand the selected file set with anything that *imports* those files, so
+  // the bot also sees the parents in any prop/signature chain it's about to
+  // change. Skipped when we already fell back to "all candidate files".
+  if (selectedFiles !== candidateFiles) {
+    const importers = findImporters(selectedFiles, candidateFiles);
+    const added = importers.filter(f => !selectedFiles.includes(f));
+    if (added.length > 0) {
+      console.log(`🔗 Auto-included ${added.length} importer file(s) (catches parent→child wiring):`);
+      added.forEach(f => console.log(`   + ${f}`));
+      selectedFiles = [...selectedFiles, ...added];
+    }
   }
 
   // Read selected files into context
