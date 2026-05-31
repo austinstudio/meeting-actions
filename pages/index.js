@@ -528,6 +528,24 @@ export default function MeetingKanban() {
     }
   };
 
+  const handleUpdateDueDate = async (taskId, newDueDate) => {
+    // Optimistic update
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, dueDate: newDueDate } : t
+    ));
+
+    try {
+      await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dueDate: newDueDate })
+      });
+    } catch (err) {
+      console.error('Failed to update due date:', err);
+      fetchData();
+    }
+  };
+
   const handleDeleteTask = (taskId) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -1626,6 +1644,7 @@ export default function MeetingKanban() {
                   onRestoreTask={handleRestoreTask}
                   onPermanentDelete={handlePermanentDelete}
                   onPinTask={handlePinTask}
+                  onUpdateDueDate={handleUpdateDueDate}
                   viewDensity={viewDensity}
                   onSortColumn={handleSortColumn}
                   currentUser={currentUser}

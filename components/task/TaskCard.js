@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { User, Clock, CheckCircle2, ArrowRight, Trash2, Pencil, Pin, X, RotateCcw, RefreshCw, Github, AlertTriangle, Package } from 'lucide-react';
 import { priorityColors, TAG_COLORS, isCurrentUser } from '../constants';
 
@@ -82,7 +82,10 @@ export function SubtaskProgress({ subtasks = [], compact = false }) {
   );
 }
 
-export function DueDateBadge({ dueDate, status }) {
+export function DueDateBadge({ dueDate, status, onChangeDueDate }) {
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const pickerRef = useRef(null);
+
   const date = new Date(dueDate);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -99,6 +102,18 @@ export function DueDateBadge({ dueDate, status }) {
   const isToday = dateOnly.getTime() === today.getTime();
   const isTomorrow = dateOnly.getTime() === tomorrow.getTime();
   const isThisWeek = dateOnly > today && dateOnly <= nextWeek;
+
+  // Click outside to close date picker
+  useEffect(() => {
+    if (!showDatePicker) return;
+    const handleClickOutside = (e) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+        setShowDatePicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDatePicker]);
 
   let label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   let classes = 'text-slate-400 dark:text-neutral-500';
@@ -118,15 +133,52 @@ export function DueDateBadge({ dueDate, status }) {
     classes = 'text-blue-600 dark:text-blue-400';
   }
 
+  const canEdit = isOverdue && onChangeDueDate;
+
+  const handleClick = (e) => {
+    if (!canEdit) return;
+    e.stopPropagation();
+    setShowDatePicker(true);
+  };
+
+  const handleDateChange = (e) => {
+    e.stopPropagation();
+    const newDate = e.target.value;
+    if (newDate) {
+      onChangeDueDate(newDate);
+      setShowDatePicker(false);
+    }
+  };
+
   return (
-    <div className={`flex items-center gap-1 text-xs ${classes}`}>
-      <Clock size={12} />
-      {label}
+    <div className="relative" ref={pickerRef}>
+      <div
+        onClick={handleClick}
+        className={`flex items-center gap-1 text-xs ${classes} ${canEdit ? 'cursor-pointer hover:opacity-80' : ''}`}
+        title={canEdit ? 'Click to reschedule' : undefined}
+      >
+        <Clock size={12} />
+        {label}
+      </div>
+      {showDatePicker && (
+        <div
+          className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-lg shadow-lg p-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="date"
+            defaultValue={dueDate}
+            onChange={handleDateChange}
+            className="px-2 py-1 text-sm border border-slate-300 dark:border-neutral-600 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-neutral-900 dark:text-white"
+            autoFocus
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-export default function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onPermanentDelete, onPin, viewDensity = 'normal', currentUser }) {
+export default function TaskCard({ task, meeting, onDelete, onEdit, isTrashView, onRestore, onPermanentDelete, onPin, viewDensity = 'normal', currentUser, onUpdateDueDate }) {
   const [isDragging, setIsDragging] = useState(false);
   const [expandContext, setExpandContext] = useState(false);
   const [expandSubtasks, setExpandSubtasks] = useState(false);
@@ -324,7 +376,7 @@ export default function TaskCard({ task, meeting, onDelete, onEdit, isTrashView,
           </span>
           <GithubResolutionBadge task={task} />
         </div>
-        <DueDateBadge dueDate={task.dueDate} status={task.status} />
+        <DueDateBadge dueDate={task.dueDate} status={task.status} onChangeDueDate={!isTrashView && onUpdateDueDate ? (newDate) => onUpdateDueDate(task.id, newDate) : undefined} />
       </div>
     </div>
   );
