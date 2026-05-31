@@ -49,7 +49,7 @@ export function TagBadge({ tag, onRemove, small = false }) {
   const colors = TAG_COLORS[tagKey] || TAG_COLORS.default;
 
   return (
-    <span className={`inline-flex items-center gap-1 ${small ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs'} rounded-full ${colors.bg} ${colors.text} border ${colors.border}`}>
+    <span className={`inline-flex items-center gap-1 ${small ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs'} rounded-full ${colors.bg} ${colors.text} border ${colors.border} shadow-sm font-medium`}>
       #{tag}
       {onRemove && (
         <button onClick={(e) => { e.stopPropagation(); onRemove(tag); }} className="hover:opacity-70">

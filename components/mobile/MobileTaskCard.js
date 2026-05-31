@@ -1,5 +1,5 @@
 import { User } from 'lucide-react';
-import { DueDateBadge } from '../task/TaskCard';
+import { DueDateBadge, TagBadge } from '../task/TaskCard';
 import { isCurrentUser } from '../constants';
 
 export default function MobileTaskCard({ task, meeting, onTap, large = false, currentUser }) {
@@ -40,9 +40,7 @@ export default function MobileTaskCard({ task, meeting, onTap, large = false, cu
       {task.tags?.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-1.5">
           {task.tags.map(tag => (
-            <span key={tag} className="px-2 py-0.5 text-xs rounded-full bg-slate-100 dark:bg-neutral-700 text-slate-600 dark:text-neutral-300">
-              {tag}
-            </span>
+            <TagBadge key={tag} tag={tag} small />
           ))}
         </div>
       )}
