@@ -29,7 +29,7 @@ function SkeletonCard() {
   );
 }
 
-export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete, onPinTask, viewDensity, onSortColumn, currentUser, showOnlyMyTasks, onToggleMyTasksFilter }) {
+export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, onEditTask, onAddTask, onColumnDragStart, onColumnDragEnd, onColumnDragOver, onColumnDrop, isDraggingColumn, showSkeletons, isTrashView, onRestoreTask, onPermanentDelete, onPinTask, onUpdateDueDate, viewDensity, onSortColumn, currentUser, showOnlyMyTasks, onToggleMyTasksFilter }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isColumnDragOver, setIsColumnDragOver] = useState(false);
   const [dropIndex, setDropIndex] = useState(null);
@@ -178,6 +178,7 @@ export default function Column({ column, tasks, meetings, onDrop, onDeleteTask, 
               onRestore={onRestoreTask}
               onPermanentDelete={onPermanentDelete}
               onPin={onPinTask}
+              onUpdateDueDate={onUpdateDueDate}
               viewDensity={viewDensity}
               currentUser={currentUser}
             />
