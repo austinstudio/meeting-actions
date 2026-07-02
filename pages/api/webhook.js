@@ -384,9 +384,9 @@ export default async function handler(req, res) {
       meetings.unshift(meeting);
       tasks = [...newTasks, ...tasks];
 
-      // Keep only last 100 meetings and 500 tasks
-      meetings = meetings.slice(0, 100);
-      tasks = tasks.slice(0, 500);
+      // NOTE: No hard cap on meetings/tasks. A previous slice(0,100)/slice(0,500)
+      // here silently deleted the oldest records once the shared KV blob exceeded
+      // the cap. See project memory: single-global-tasks-blob storage refactor.
 
       // Save to KV
       await saveMeetings(meetings);

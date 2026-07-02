@@ -46,10 +46,10 @@ export default async function handler(req, res) {
       
       // Add to beginning of tasks array
       tasks.unshift(newTask);
-      
-      // Keep only last 500 tasks
-      tasks = tasks.slice(0, 500);
-      
+
+      // NOTE: No hard cap — a previous slice(0,500) silently deleted the oldest
+      // tasks once the shared KV blob exceeded 500 records.
+
       // Save back to KV
       await kv.set('tasks', tasks);
       

@@ -271,8 +271,8 @@ export default async function handler(req, res) {
   let tasks = await getTasks();
   meetings.unshift(meeting);
   tasks = [...newTasks, ...tasks];
-  meetings = meetings.slice(0, 100);
-  tasks = tasks.slice(0, 500);
+  // NOTE: No hard cap — a previous slice(0,100)/slice(0,500) silently deleted
+  // the oldest records once the shared KV blob exceeded the cap.
   await saveMeetings(meetings);
   await saveTasks(tasks);
 
