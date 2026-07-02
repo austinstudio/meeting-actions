@@ -37,3 +37,12 @@ coverage
 
 # Brainstorming mockups (local only)
 .superpowers/
+
+# Digest recovery — contains confidential task data, never commit
+scripts/digests-input.txt
+scripts/digests-raw.txt
+scripts/digests-parsed.json
+scripts/kv-backup-*.json
+scripts/recovered-to-add-*.json
+scripts/recovered-tasks-*.json
+.env*
