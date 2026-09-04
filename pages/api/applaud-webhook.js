@@ -199,7 +199,13 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, skipped: true, reason: 'duplicate plaudRecordingId', meeting: { id: existing.id, title: existing.title } });
     }
   }
-  const norm = (s) => String(s || '').toLowerCase().replace(/\[plaud-autoflow\]\s*\d{2}-\d{2}\s*/, '').replace(/^(email|applaud):\s*/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  // Normalise both sides the same way: drop "Email:"/"Applaud:" labels, the "[Plaud-AutoFlow]" tag,
+  // and the leading "MM-DD " that Plaud puts on recording titles (Applaud filenames keep it too).
+  const norm = (s) => String(s || '').toLowerCase()
+    .replace(/^\s*(email|applaud):\s*/, '')
+    .replace(/\[plaud-autoflow\]\s*/, '')
+    .replace(/^\s*\d{2}-\d{2}\s*/, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
   const wanted = norm(title);
   if (wanted.length >= 8) {
     // AutoFlow emails can arrive a day or two after the recording, so match titles within ±3 days.
