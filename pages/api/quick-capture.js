@@ -6,6 +6,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { kv } from '@vercel/kv';
 import { addMeetingWithTasks } from '../../lib/meeting-store';
+import { notifyIngestFailure } from '../../lib/alerts';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -230,6 +231,7 @@ export default async function handler(req, res) {
       }
     } catch (parseError) {
       console.error('Failed to parse Gemini response:', responseText);
+      await notifyIngestFailure('quick-capture', 'Failed to parse Gemini extraction results', { source: req.body?.source });
       return res.status(500).json({ error: 'Failed to parse extraction results', raw: responseText });
     }
 
@@ -288,6 +290,7 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error('Quick capture error:', error);
+    await notifyIngestFailure('quick-capture', error, { source: req.body?.source, chars: (req.body?.text || '').length });
     return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 }

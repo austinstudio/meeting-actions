@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { LogOut } from 'lucide-react';
-import { Calendar, Clock, CheckCircle2, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, Pencil, Search, Sparkles, Bell, History, Sun, Moon, Monitor, Tag, Rows3, Rows4, LayoutList, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, Gift, Bot, Github, Unlink, Mail } from 'lucide-react';
+import { Calendar, Clock, CheckCircle2, RefreshCw, Plus, FileText, X, Users, Trash2, Archive, Pencil, Search, Sparkles, Bell, History, Sun, Moon, Monitor, Tag, Rows3, Rows4, LayoutList, PanelLeftClose, PanelLeft, Menu, SlidersHorizontal, ArrowUpDown, Gift, Bot, Github, Unlink, Mail } from 'lucide-react';
 import { APP_VERSION, FEATURES, getNewFeatures, getAllFeatures } from '../lib/features';
 
 import { DEFAULT_COLUMNS, COLUMN_COLORS, priorityColors, PREDEFINED_TAGS, isCurrentUser } from '../components/constants';
@@ -37,6 +37,38 @@ export default function MeetingKanban() {
   const [showArchived, setShowArchived] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [showEmptyMeetings, setShowEmptyMeetings] = useState(false);
+  // Sidebar meeting order. Persisted; default is the meeting's own date (newest first),
+  // not the order meetings were added to the board.
+  const [meetingSort, setMeetingSort] = useState('date-desc');
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('meetingSort') : null;
+    if (saved) setMeetingSort(saved);
+  }, []);
+  const changeMeetingSort = (value) => {
+    setMeetingSort(value);
+    localStorage.setItem('meetingSort', value);
+  };
+  const MEETING_SORTS = [
+    { value: 'date-desc', label: 'Meeting date · newest' },
+    { value: 'date-asc', label: 'Meeting date · oldest' },
+    { value: 'added-desc', label: 'Recently added' },
+    { value: 'title', label: 'Title A–Z' },
+    { value: 'tasks-desc', label: 'Most tasks' },
+    { value: 'triage-desc', label: 'Needs triage first' },
+  ];
+  const sortMeetings = (list) => {
+    const byDate = (m) => Date.parse(m.date || '') || 0;
+    const byAdded = (m) => Date.parse(m.processedAt || m.createdAt || '') || (parseInt(String(m.id).replace(/^m_/, ''), 10) || 0);
+    const cmp = {
+      'date-desc': (a, b) => byDate(b) - byDate(a) || byAdded(b) - byAdded(a),
+      'date-asc': (a, b) => byDate(a) - byDate(b) || byAdded(a) - byAdded(b),
+      'added-desc': (a, b) => byAdded(b) - byAdded(a),
+      'title': (a, b) => String(a.title || '').localeCompare(String(b.title || ''), undefined, { sensitivity: 'base' }),
+      'tasks-desc': (a, b) => (b.taskCount - a.taskCount) || byDate(b) - byDate(a),
+      'triage-desc': (a, b) => (b.uncategorizedCount - a.uncategorizedCount) || byDate(b) - byDate(a),
+    }[meetingSort] || ((a, b) => byDate(b) - byDate(a));
+    return [...list].sort(cmp);
+  };
   const [loading, setLoading] = useState(true);
   const [lastSynced, setLastSynced] = useState(null);
   const [error, setError] = useState(null);
@@ -1359,12 +1391,30 @@ export default function MeetingKanban() {
                   </button>
                 </div>
 
-                <button
-                  onClick={() => { setSelectedMeeting(null); setMobileMenuOpen(false); }}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${!selectedMeeting ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
-                >
-                  All Meetings ({meetings.length})
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { setSelectedMeeting(null); setMobileMenuOpen(false); }}
+                    className={`flex-1 min-w-0 text-left px-3 py-2 rounded-lg text-sm transition-colors ${!selectedMeeting ? 'bg-indigo-100 dark:bg-orange-500/20 text-indigo-700 dark:text-orange-500 font-medium' : 'text-slate-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-800'}`}
+                  >
+                    All Meetings ({meetings.length})
+                  </button>
+                  <label
+                    className="relative flex items-center text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-300 cursor-pointer"
+                    title={`Sort: ${MEETING_SORTS.find(o => o.value === meetingSort)?.label || ''}`}
+                  >
+                    <ArrowUpDown size={16} className="pointer-events-none" />
+                    <select
+                      aria-label="Sort meetings"
+                      value={meetingSort}
+                      onChange={(e) => changeMeetingSort(e.target.value)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    >
+                      {MEETING_SORTS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
 
               {/* Scrollable Meetings List */}
@@ -1382,7 +1432,8 @@ export default function MeetingKanban() {
                   </div>
                 ) : (
                   <div className="space-y-2 pb-2">
-                    {meetings
+                    {(() => {
+                      return sortMeetings(meetings
                       .map(meeting => {
                         const meetingTasks = tasks.filter(t => t.meetingId === meeting.id && !t.archived && !t.deleted);
                         return {
@@ -1391,7 +1442,8 @@ export default function MeetingKanban() {
                           uncategorizedCount: meetingTasks.filter(t => t.status === 'uncategorized').length
                         };
                       })
-                      .filter(meeting => showEmptyMeetings || meeting.taskCount > 0)
+                      .filter(meeting => showEmptyMeetings || meeting.taskCount > 0));
+                    })()
                       .map(meeting => (
                         <MeetingCard
                           key={meeting.id}

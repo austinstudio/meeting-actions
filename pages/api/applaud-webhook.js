@@ -14,7 +14,8 @@
 import crypto from 'node:crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { kv } from '@vercel/kv';
-import { addMeetingWithTasks } from '../../lib/meeting-store';
+import { addMeetingWithTasks, findMatchingMeeting } from '../../lib/meeting-store';
+import { withIngestAlert } from '../../lib/alerts';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -135,7 +136,7 @@ function verifySignature(rawBody, signature, secret) {
   return crypto.timingSafeEqual(a, b);
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Applaud-Signature, X-Applaud-Event');
@@ -199,115 +200,11 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, skipped: true, reason: 'duplicate plaudRecordingId', meeting: { id: existing.id, title: existing.title } });
     }
   }
-  // Normalise both sides the same way: drop "Email:"/"Applaud:" labels, the "[Plaud-AutoFlow]" tag,
-  // and the leading "MM-DD " that Plaud puts on recording titles (Applaud filenames keep it too).
-  const norm = (s) => String(s || '').toLowerCase()
-    .replace(/^\s*(email|applaud):\s*/, '')
-    .replace(/\[plaud-autoflow\]\s*/, '')
-    .replace(/^\s*\d{2}-\d{2}\s*/, '')
-    .replace(/[^a-z0-9]+/g, ' ').trim();
-  const wanted = norm(title);
-  if (wanted.length >= 8) {
-    // AutoFlow emails can arrive a day or two after the recording, so match titles within ±3 days.
-    const dayMs = 24 * 60 * 60 * 1000;
-    const near = (d) => Math.abs(Date.parse(d || '') - Date.parse(meetingDate)) <= 3 * dayMs;
-    const viaEmail = allMeetings.find(m => m.source === 'email' && near(m.date) &&
-      (norm(m.sourceFileName) === wanted || norm(m.title) === wanted || norm(m.sourceFileName).includes(wanted)));
-    if (viaEmail) {
-      console.log(`Applaud webhook: "${title}" matches email meeting ${viaEmail.id} (${viaEmail.date}); skipping`);
-      return res.status(200).json({ ok: true, skipped: true, reason: 'already imported via Plaud email', meeting: { id: viaEmail.id, title: viaEmail.title } });
-    }
+  const viaEmail = findMatchingMeeting(allMeetings, { title, date: meetingDate, sources: ['email'] });
+  if (viaEmail) {
+    console.log(`Applaud webhook: "${title}" matches email meeting ${viaEmail.id} (${viaEmail.date}); skipping`);
+    return res.status(200).json({ ok: true, skipped: true, reason: 'already imported via Plaud email', meeting: { id: viaEmail.id, title: viaEmail.title } });
   }
-
-  console.log(`Applaud webhook: processing "${title}" (${transcriptText.length} chars)`);
-
-  // Fetch contacts for known people directory
-  let glossaryPrompt = '';
-  try {
-    let people = [];
-    const contacts = await kv.get('contacts') || [];
-    const userContacts = contacts.filter(c => c.userId === userId && !c.deleted);
-    if (userContacts.length > 0) {
-      people = userContacts.map(c => ({
-        name: c.name, aliases: c.aliases || [], role: c.role || '', team: c.team || ''
-      }));
-    } else {
-      const glossary = await kv.get('glossary') || [];
-      people = glossary
-        .filter(e => e.userId === userId)
-        .map(e => ({ name: e.name, aliases: e.aliases || [], role: e.role || '', team: e.team || '' }));
-    }
-    if (people.length > 0) {
-      const lines = people.map(e => {
-        let line = `- ${e.name}`;
-        if (e.aliases.length > 0) line += ` (may appear as: ${e.aliases.join(', ')})`;
-        if (e.role || e.team) line += ` — ${[e.role, e.team].filter(Boolean).join(', ')}`;
-        return line;
-      });
-      glossaryPrompt = `\n\n## KNOWN PEOPLE DIRECTORY\nUse the correct spelling from this list when names appear in the transcript.\n\n${lines.join('\n')}\n`;
-    }
-  } catch (e) {
-    console.error('Failed to fetch contacts:', e);
-  }
-
-  // Run Gemini extraction
-  let extracted;
-  try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-    const result = await model.generateContent(
-      getExtractionPrompt() + glossaryPrompt + '\n' + transcriptText
-    );
-    const responseText = result.response.text();
-    const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON in response');
-    extracted = JSON.parse(match[0]);
-  } catch (err) {
-    console.error('Gemini extraction failed:', err);
-    return res.status(500).json({ error: 'Extraction failed', details: err.message });
-  }
-
-  // Store meeting and tasks
-  const meetingId = `m_${Date.now()}`;
-  const meetingTitle = extracted.meeting?.title || title;
-  const createdAt = new Date().toISOString();
-
-  const meeting = {
-    id: meetingId,
-    userId,
-    title: meetingTitle,
-    sourceFileName: title,
-    transcript: transcriptText,
-    date: meetingDate,
-    duration: extracted.meeting?.duration || null,
-    participants: extracted.meeting?.participants || [],
-    summary: extracted.meeting?.summary || '',
-    plaudRecordingId,
-    source: 'applaud',
-    processedAt: createdAt,
-  };
-
-  const newTasks = (extracted.tasks || []).map((task, i) => ({
-    id: `t_${Date.now()}_${i}`,
-    userId,
-    meetingId,
-    task: task.task,
-    owner: task.owner || 'Me',
-    dueDate: task.dueDate,
-    status: 'uncategorized',
-    type: task.type || 'action',
-    priority: task.priority || 'medium',
-    person: task.person || null,
-    context: task.context || null,
-    createdAt,
-    activity: [{
-      id: `act_${Date.now()}_${i}`,
-      type: 'created',
-      source: sourceLabel,
-      meetingId,
-      timestamp: createdAt,
-    }],
-  }));
 
   // Re-check right before writing: Gemini takes several seconds, and Applaud's poller and
   // replay endpoint can deliver the same recording concurrently. The early check above
@@ -329,3 +226,5 @@ export default async function handler(req, res) {
     taskCount: newTasks.length,
   });
 }
+
+export default withIngestAlert('applaud-webhook', handler);

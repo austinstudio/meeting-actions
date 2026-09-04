@@ -5,7 +5,8 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { kv } from '@vercel/kv';
-import { addMeetingWithTasks } from '../../lib/meeting-store';
+import { addMeetingWithTasks, findMatchingMeeting, getMeetings as loadMeetings } from '../../lib/meeting-store';
+import { notifyIngestFailure } from '../../lib/alerts';
 import { extractText } from 'unpdf';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -214,6 +215,16 @@ export default async function handler(req, res) {
 
     console.log(`Inbound email from ${from}: "${subject}" (${attachments?.length || 0} attachments)`);
 
+    // Same recording may already be on the board from Applaud (it runs alongside AutoFlow emails).
+    {
+      const emailDate = date ? new Date(date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+      const viaApplaud = findMatchingMeeting(await loadMeetings(), { title: subject, date: emailDate, sources: ['applaud'] });
+      if (viaApplaud) {
+        console.log(`Inbound email: "${subject}" matches Applaud meeting ${viaApplaud.id} (${viaApplaud.date}); skipping`);
+        return res.status(200).json({ success: true, skipped: true, reason: 'already imported via Applaud', meeting: { id: viaApplaud.id, title: viaApplaud.title }, tasks: [] });
+      }
+    }
+
     // 1. Extract text from attachments (PDF, TXT, etc.)
     let attachmentTexts = [];
     if (attachments && attachments.length > 0) {
@@ -300,6 +311,7 @@ export default async function handler(req, res) {
       }
     } catch (parseError) {
       console.error('Failed to parse Gemini response:', responseText);
+      await notifyIngestFailure('inbound-email', 'Failed to parse Gemini extraction results', { subject });
       return res.status(500).json({ error: 'Failed to parse extraction results', raw: responseText });
     }
 
@@ -361,6 +373,7 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error('Inbound email processing error:', error);
+    await notifyIngestFailure('inbound-email', error, { subject: req.body?.subject, from: req.body?.from });
     return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 }

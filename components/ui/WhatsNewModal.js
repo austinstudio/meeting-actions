@@ -1,8 +1,9 @@
 import React from 'react';
-import { X, Calendar, Sparkles, Smartphone, History, Gift, Users, Bot, Github, Mail, Bell } from 'lucide-react';
+import { X, Calendar, Sparkles, Smartphone, History, Gift, Users, Bot, Github, Mail, Bell, ArrowUpDown } from 'lucide-react';
 
 const FEATURE_ICONS = {
   Sparkles: Sparkles,
+  ArrowUpDown: ArrowUpDown,
   Smartphone: Smartphone,
   History: History,
   Gift: Gift,

@@ -5,6 +5,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { kv } from '@vercel/kv';
 import { addMeetingWithTasks } from '../../lib/meeting-store';
+import { notifyIngestFailure } from '../../lib/alerts';
 import { requireAuth } from '../../lib/auth';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -392,6 +393,7 @@ export default async function handler(req, res) {
 
     } catch (error) {
       console.error('Webhook error:', error);
+      await notifyIngestFailure('plaud-webhook', error, { title: req.body?.title });
       return res.status(500).json({ 
         error: 'Failed to process transcript',
         details: error.message 
