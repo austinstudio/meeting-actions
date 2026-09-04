@@ -4,6 +4,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { kv } from '@vercel/kv';
+import { addMeetingWithTasks } from '../../lib/meeting-store';
 import { requireAuth } from '../../lib/auth';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -377,20 +378,8 @@ export default async function handler(req, res) {
       }));
 
       // Get existing data from KV
-      let meetings = await getMeetings();
-      let tasks = await getTasks();
-
-      // Add new data
-      meetings.unshift(meeting);
-      tasks = [...newTasks, ...tasks];
-
-      // NOTE: No hard cap on meetings/tasks. A previous slice(0,100)/slice(0,500)
-      // here silently deleted the oldest records once the shared KV blob exceeded
-      // the cap. See project memory: single-global-tasks-blob storage refactor.
-
-      // Save to KV
-      await saveMeetings(meetings);
-      await saveTasks(tasks);
+      // Transcript is stored in its own key; metadata + tasks are appended to the arrays.
+      await addMeetingWithTasks(meeting, newTasks);
 
       console.log(`Extracted ${newTasks.length} tasks from meeting: ${meeting.title}`);
 

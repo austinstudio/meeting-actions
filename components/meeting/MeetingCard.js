@@ -15,7 +15,7 @@ export default function MeetingCard({ meeting, taskCount, isSelected, onClick, o
       }`}
     >
       <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover/meeting:opacity-100 transition-opacity bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-md px-1 py-0.5 shadow-sm z-10">
-        {meeting.transcript && (
+        {(meeting.transcript || meeting.hasTranscript) && (
           <button
             onClick={(e) => {
               e.stopPropagation();

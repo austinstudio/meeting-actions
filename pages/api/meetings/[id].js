@@ -3,6 +3,7 @@
 
 import { kv } from '@vercel/kv';
 import { requireAuth } from '../../../lib/auth';
+import { deleteTranscript } from '../../../lib/meeting-store';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -82,6 +83,7 @@ export default async function handler(req, res) {
       // Save back to KV
       await kv.set('meetings', meetings);
       await kv.set('tasks', tasks);
+      await deleteTranscript(id);
 
       return res.status(200).json({
         success: true,

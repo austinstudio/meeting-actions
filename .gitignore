@@ -46,3 +46,6 @@ scripts/kv-backup-*.json
 scripts/recovered-to-add-*.json
 scripts/recovered-tasks-*.json
 .env*
+
+# Local KV backups from scripts/migrate-transcripts.mjs (10 MB+, never commit)
+scripts/kv-backup-meetings-*.json
