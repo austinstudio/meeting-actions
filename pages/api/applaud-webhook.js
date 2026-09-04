@@ -178,6 +178,38 @@ export default async function handler(req, res) {
   const plaudRecordingId = recording?.id || null;
   const sourceLabel = `Applaud: ${title}`;
 
+  // Recovery guard (Sept 2026): Plaud AutoFlow emails already created meetings for
+  // everything up to APPLAUD_ACCEPT_AFTER, so when Applaud replays its backlog we only
+  // accept recordings after that date. Unset the env var to accept everything again.
+  const acceptAfter = Date.parse(process.env.APPLAUD_ACCEPT_AFTER || '');
+  if (!Number.isNaN(acceptAfter) && startTimeMs && startTimeMs < acceptAfter) {
+    console.log(`Applaud webhook: skipping "${title}" (${meetingDate} is before APPLAUD_ACCEPT_AFTER)`);
+    return res.status(200).json({ ok: true, skipped: true, reason: 'before APPLAUD_ACCEPT_AFTER', meetingDate });
+  }
+
+  // Idempotency: the same recording must never create two meetings.
+  //  1. Same Plaud recording id (Applaud replays / restarts).
+  //  2. Same day + same title as a meeting the Plaud AutoFlow email already created
+  //     (email subjects are "[Plaud-AutoFlow] MM-DD <recording title>").
+  const allMeetings = await getMeetings();
+  if (plaudRecordingId) {
+    const existing = allMeetings.find(m => m.plaudRecordingId === plaudRecordingId);
+    if (existing) {
+      console.log(`Applaud webhook: "${title}" already imported as ${existing.id}`);
+      return res.status(200).json({ ok: true, skipped: true, reason: 'duplicate plaudRecordingId', meeting: { id: existing.id, title: existing.title } });
+    }
+  }
+  const norm = (s) => String(s || '').toLowerCase().replace(/\[plaud-autoflow\]\s*\d{2}-\d{2}\s*/, '').replace(/^(email|applaud):\s*/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const wanted = norm(title);
+  if (wanted.length >= 8) {
+    const sameDay = allMeetings.find(m => m.date === meetingDate && m.source === 'email' &&
+      (norm(m.sourceFileName) === wanted || norm(m.title) === wanted || norm(m.sourceFileName).includes(wanted)));
+    if (sameDay) {
+      console.log(`Applaud webhook: "${title}" matches email meeting ${sameDay.id} on ${meetingDate}; skipping`);
+      return res.status(200).json({ ok: true, skipped: true, reason: 'already imported via Plaud email', meeting: { id: sameDay.id, title: sameDay.title } });
+    }
+  }
+
   console.log(`Applaud webhook: processing "${title}" (${transcriptText.length} chars)`);
 
   // Fetch contacts for known people directory

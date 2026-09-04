@@ -49,3 +49,5 @@ scripts/recovered-tasks-*.json
 
 # Local KV backups from scripts/migrate-transcripts.mjs (10 MB+, never commit)
 scripts/kv-backup-meetings-*.json
+scripts/reforward-results-*.json
+__pycache__/
