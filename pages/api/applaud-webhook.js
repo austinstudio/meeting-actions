@@ -202,11 +202,14 @@ export default async function handler(req, res) {
   const norm = (s) => String(s || '').toLowerCase().replace(/\[plaud-autoflow\]\s*\d{2}-\d{2}\s*/, '').replace(/^(email|applaud):\s*/, '').replace(/[^a-z0-9]+/g, ' ').trim();
   const wanted = norm(title);
   if (wanted.length >= 8) {
-    const sameDay = allMeetings.find(m => m.date === meetingDate && m.source === 'email' &&
+    // AutoFlow emails can arrive a day or two after the recording, so match titles within ±3 days.
+    const dayMs = 24 * 60 * 60 * 1000;
+    const near = (d) => Math.abs(Date.parse(d || '') - Date.parse(meetingDate)) <= 3 * dayMs;
+    const viaEmail = allMeetings.find(m => m.source === 'email' && near(m.date) &&
       (norm(m.sourceFileName) === wanted || norm(m.title) === wanted || norm(m.sourceFileName).includes(wanted)));
-    if (sameDay) {
-      console.log(`Applaud webhook: "${title}" matches email meeting ${sameDay.id} on ${meetingDate}; skipping`);
-      return res.status(200).json({ ok: true, skipped: true, reason: 'already imported via Plaud email', meeting: { id: sameDay.id, title: sameDay.title } });
+    if (viaEmail) {
+      console.log(`Applaud webhook: "${title}" matches email meeting ${viaEmail.id} (${viaEmail.date}); skipping`);
+      return res.status(200).json({ ok: true, skipped: true, reason: 'already imported via Plaud email', meeting: { id: viaEmail.id, title: viaEmail.title } });
     }
   }
 
@@ -300,6 +303,16 @@ export default async function handler(req, res) {
     }],
   }));
 
+  // Re-check right before writing: Gemini takes several seconds, and Applaud's poller and
+  // replay endpoint can deliver the same recording concurrently. The early check above
+  // catches most duplicates; this one closes the race window.
+  if (plaudRecordingId) {
+    const raced = (await getMeetings()).find(m => m.plaudRecordingId === plaudRecordingId);
+    if (raced) {
+      console.log(`Applaud webhook: "${title}" was imported concurrently as ${raced.id}; skipping`);
+      return res.status(200).json({ ok: true, skipped: true, reason: 'duplicate plaudRecordingId (raced)', meeting: { id: raced.id, title: raced.title } });
+    }
+  }
   // Transcript is stored in its own key; metadata + tasks are appended to the arrays.
   await addMeetingWithTasks(meeting, newTasks);
 
