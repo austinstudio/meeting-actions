@@ -5,7 +5,7 @@
 
 import { kv } from '@vercel/kv';
 import { requireAuth } from '../../../lib/auth';
-import { getKnownPeople } from '../../../lib/extract';
+import { getKnownPeople, todayInTimeZone } from '../../../lib/extract';
 import { DEFAULT_COLUMNS, PREDEFINED_TAGS } from '../../../components/constants';
 
 export default async function handler(req, res) {
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
 
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).json({
-      today: new Date().toISOString().split('T')[0],
+      today: todayInTimeZone(typeof req.query.tz === 'string' ? req.query.tz : 'UTC'),
       people,
       columns,
       tags,

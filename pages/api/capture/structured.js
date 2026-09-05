@@ -8,7 +8,7 @@
 
 import { requireAuth } from '../../../lib/auth';
 import { addMeetingWithTasks } from '../../../lib/meeting-store';
-import { getKnownPeople, extractWithGemini, buildTaskRecords } from '../../../lib/extract';
+import { getKnownPeople, extractWithGemini, buildTaskRecords, localDateOrToday } from '../../../lib/extract';
 import { notifyIngestFailure, withIngestAlert } from '../../../lib/alerts';
 
 async function handler(req, res) {
@@ -23,14 +23,15 @@ async function handler(req, res) {
 
   const source = typeof body.source === 'string' && body.source ? body.source.slice(0, 40) : 'watch';
   const recordedAt = Number.isFinite(body.recordedAt) ? new Date(body.recordedAt) : new Date();
-  const meetingDate = recordedAt.toISOString().split('T')[0];
+  // The phone sends its local calendar date; a UTC split of recordedAt is wrong in the evening (US zones).
+  const meetingDate = localDateOrToday(body.localDate) === body.localDate ? body.localDate : recordedAt.toISOString().split('T')[0];
   const clientParse = body.clientParse && typeof body.clientParse === 'object' ? body.clientParse : null;
   const wantServer = body.serverParse === true || !clientParse;
 
   let title, summary, tasks, parsedBy;
   if (wantServer) {
     try {
-      const { extracted } = await extractWithGemini(transcript, { people: await getKnownPeople(userId) });
+      const { extracted } = await extractWithGemini(transcript, { people: await getKnownPeople(userId), today: meetingDate });
       title = extracted.meeting?.title; summary = extracted.meeting?.summary || '';
       tasks = extracted.tasks || []; parsedBy = 'server-gemini';
     } catch (e) {

@@ -5,7 +5,7 @@
 
 import { kv } from '@vercel/kv';
 import { addMeetingWithTasks } from '../../lib/meeting-store';
-import { getKnownPeople, extractWithGemini, buildTaskRecords } from '../../lib/extract';
+import { getKnownPeople, extractWithGemini, buildTaskRecords, localDateOrToday } from '../../lib/extract';
 import { notifyIngestFailure } from '../../lib/alerts';
 
 // KV helpers (same pattern as webhook.js / inbound-email.js)
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
     // Gemini extraction (shared with every other ingest path)
     let extracted;
     try {
-      ({ extracted } = await extractWithGemini(trimmedText, { people: await getKnownPeople(userId) }));
+      ({ extracted } = await extractWithGemini(trimmedText, { people: await getKnownPeople(userId), today: localDateOrToday(req.body?.localDate) }));
     } catch (parseError) {
       console.error('Failed to parse Gemini response:', parseError);
       await notifyIngestFailure('quick-capture', 'Failed to parse Gemini extraction results', { source: req.body?.source });
@@ -74,7 +74,7 @@ export default async function handler(req, res) {
     // Store meeting and tasks in KV
     const meetingId = `m_${Date.now()}`;
     const meetingTitle = extracted.meeting?.title || `${sourceLabel}: Captured Text`;
-    const meetingDate = new Date().toISOString().split('T')[0];
+    const meetingDate = localDateOrToday(req.body?.localDate);
 
     const meeting = {
       id: meetingId,
