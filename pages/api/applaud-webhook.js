@@ -164,6 +164,13 @@ async function handler(req, res) {
   if (!transcriptText || !transcriptText.trim()) {
     return res.status(200).json({ ok: true, skipped: true, reason: 'no transcript_text' });
   }
+  // Untitled pocket/accidental recordings produce a few words of transcript. There is nothing to
+  // extract, and asking Gemini for JSON on them fails (500 + alert noise), so acknowledge and skip.
+  const MIN_TRANSCRIPT_CHARS = 120;
+  if (transcriptText.trim().length < MIN_TRANSCRIPT_CHARS) {
+    console.log(`Applaud webhook: skipping "${recording?.filename}" (${transcriptText.trim().length} chars, too short)`);
+    return res.status(200).json({ ok: true, skipped: true, reason: 'transcript too short', chars: transcriptText.trim().length });
+  }
 
   const userId = (process.env.INBOUND_EMAIL_USER_ID || '').trim();
   if (!userId) {
