@@ -10,6 +10,7 @@ export async function middleware(request) {
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/inbound-email') ||
     pathname.startsWith('/api/quick-capture') ||
+    pathname.startsWith('/api/capture/') ||
     pathname.startsWith('/api/applaud-webhook') ||
     pathname.startsWith('/api/github/issue-resolved') ||
     pathname.startsWith('/api/cron/')
