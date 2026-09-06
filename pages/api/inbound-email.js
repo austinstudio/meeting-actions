@@ -24,12 +24,7 @@ async function getMeetings() {
   try { return (await kv.get('meetings')) || []; }
   catch (e) { console.error('KV get meetings error:', e); return []; }
 }
-async function getTasks() {
-  try { return (await kv.get('tasks')) || []; }
-  catch (e) { console.error('KV get tasks error:', e); return []; }
-}
 async function saveMeetings(meetings) { await kv.set('meetings', meetings); }
-async function saveTasks(tasks) { await kv.set('tasks', tasks); }
 
 // Extraction prompt — same as webhook.js
 function getExtractionPrompt() {

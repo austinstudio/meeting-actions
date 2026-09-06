@@ -2,6 +2,7 @@
 // Edit or delete a meeting
 
 import { kv } from '@vercel/kv';
+import { updateTasks } from '../../../lib/task-store.mjs';
 import { requireAuth } from '../../../lib/auth';
 import { deleteTranscript } from '../../../lib/meeting-store';
 
@@ -64,7 +65,6 @@ export default async function handler(req, res) {
     try {
       // Get current data from KV
       let meetings = await kv.get('meetings') || [];
-      let tasks = await kv.get('tasks') || [];
 
       // Check if meeting exists and belongs to user
       const meetingIndex = meetings.findIndex(m => m.id === id && m.userId === userId);
@@ -76,13 +76,13 @@ export default async function handler(req, res) {
       const deletedMeeting = meetings[meetingIndex];
       meetings = meetings.filter(m => m.id !== id);
 
-      // Remove all tasks associated with this meeting (that belong to user)
-      const deletedTaskCount = tasks.filter(t => t.meetingId === id && t.userId === userId).length;
-      tasks = tasks.filter(t => !(t.meetingId === id && t.userId === userId));
-
       // Save back to KV
       await kv.set('meetings', meetings);
-      await kv.set('tasks', tasks);
+      // Remove the meeting's tasks under compare-and-set (lib/task-store.mjs)
+      const { deletedTaskCount } = await updateTasks(kv, tasks => ({
+        tasks: tasks.filter(t => !(t.meetingId === id && t.userId === userId)),
+        deletedTaskCount: tasks.filter(t => t.meetingId === id && t.userId === userId).length,
+      }));
       await deleteTranscript(id);
 
       return res.status(200).json({

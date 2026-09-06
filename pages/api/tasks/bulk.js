@@ -2,6 +2,7 @@
 // Bulk operations on tasks (archive all done, etc.)
 
 import { kv } from '@vercel/kv';
+import { updateTasks } from '../../../lib/task-store.mjs';
 import { requireAuth } from '../../../lib/auth';
 
 export default async function handler(req, res) {
@@ -20,68 +21,57 @@ export default async function handler(req, res) {
     try {
       const { action } = req.body;
 
-      // Get current tasks from KV
-      let tasks = await kv.get('tasks') || [];
-
+      // Every action is a compare-and-set update of the shared array (lib/task-store.mjs).
       if (action === 'archive-done') {
-        // Archive all user's tasks with status 'done'
-        let archivedCount = 0;
-        tasks = tasks.map(t => {
-          if (t.userId === userId && t.status === 'done' && !t.archived) {
-            archivedCount++;
-            return {
-              ...t,
-              archived: true,
-              archivedAt: new Date().toISOString()
-            };
-          }
-          return t;
+        const { count } = await updateTasks(kv, tasks => {
+          let count = 0;
+          const next = tasks.map(t => {
+            if (t.userId === userId && t.status === 'done' && !t.archived) {
+              count++;
+              return { ...t, archived: true, archivedAt: new Date().toISOString() };
+            }
+            return t;
+          });
+          return { tasks: next, count };
         });
-
-        await kv.set('tasks', tasks);
 
         return res.status(200).json({
           success: true,
-          archivedCount,
-          message: `Archived ${archivedCount} completed tasks`
+          archivedCount: count,
+          message: `Archived ${count} completed tasks`
         });
       }
 
       if (action === 'unarchive-all') {
-        // Unarchive all user's tasks
-        let unarchivedCount = 0;
-        tasks = tasks.map(t => {
-          if (t.userId === userId && t.archived) {
-            unarchivedCount++;
-            return {
-              ...t,
-              archived: false,
-              archivedAt: null
-            };
-          }
-          return t;
+        const { count } = await updateTasks(kv, tasks => {
+          let count = 0;
+          const next = tasks.map(t => {
+            if (t.userId === userId && t.archived) {
+              count++;
+              return { ...t, archived: false, archivedAt: null };
+            }
+            return t;
+          });
+          return { tasks: next, count };
         });
-
-        await kv.set('tasks', tasks);
 
         return res.status(200).json({
           success: true,
-          unarchivedCount,
-          message: `Unarchived ${unarchivedCount} tasks`
+          unarchivedCount: count,
+          message: `Unarchived ${count} tasks`
         });
       }
 
       if (action === 'delete-archived') {
-        // Permanently delete all user's archived tasks
-        const userArchivedCount = tasks.filter(t => t.userId === userId && t.archived).length;
-        tasks = tasks.filter(t => !(t.userId === userId && t.archived));
-
-        await kv.set('tasks', tasks);
+        const { count } = await updateTasks(kv, tasks => ({
+          tasks: tasks.filter(t => !(t.userId === userId && t.archived)),
+          count: tasks.filter(t => t.userId === userId && t.archived).length,
+        }));
 
         return res.status(200).json({
           success: true,
-          deletedCount: userArchivedCount,
-          message: `Permanently deleted ${userArchivedCount} archived tasks`
+          deletedCount: count,
+          message: `Permanently deleted ${count} archived tasks`
         });
       }
 
@@ -92,14 +82,13 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'Updates array required' });
         }
 
-        updates.forEach(({ id, order }) => {
-          const taskIndex = tasks.findIndex(t => t.id === id && t.userId === userId);
-          if (taskIndex !== -1) {
-            tasks[taskIndex].order = order;
-          }
+        await updateTasks(kv, tasks => {
+          updates.forEach(({ id, order }) => {
+            const taskIndex = tasks.findIndex(t => t.id === id && t.userId === userId);
+            if (taskIndex !== -1) tasks[taskIndex].order = order;
+          });
+          return { tasks };
         });
-
-        await kv.set('tasks', tasks);
 
         return res.status(200).json({
           success: true,

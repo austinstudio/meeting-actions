@@ -35,10 +35,6 @@ async function saveMeetings(meetings) {
   await kv.set('meetings', meetings);
 }
 
-async function saveTasks(tasks) {
-  await kv.set('tasks', tasks);
-}
-
 // Parse date from title string - handles common formats
 function parseDateFromTitle(title) {
   if (!title) return null;

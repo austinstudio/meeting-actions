@@ -2,6 +2,7 @@
 // Create new tasks manually (not from transcript)
 
 import { kv } from '@vercel/kv';
+import { updateTasks } from '../../../lib/task-store.mjs';
 import { requireAuth } from '../../../lib/auth';
 
 export default async function handler(req, res) {
@@ -24,9 +25,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Task description is required' });
       }
 
-      // Get current tasks from KV
-      let tasks = await kv.get('tasks') || [];
-
       // Create new task
       const newTask = {
         id: `t_${Date.now()}`,
@@ -44,14 +42,9 @@ export default async function handler(req, res) {
         manual: true // Flag to indicate this was manually created
       };
       
-      // Add to beginning of tasks array
-      tasks.unshift(newTask);
-
-      // NOTE: No hard cap — a previous slice(0,500) silently deleted the oldest
-      // tasks once the shared KV blob exceeded 500 records.
-
-      // Save back to KV
-      await kv.set('tasks', tasks);
+      // Prepend under compare-and-set (lib/task-store.mjs). No hard cap — a previous
+      // slice(0,500) silently deleted the oldest tasks once the blob exceeded 500 records.
+      await updateTasks(kv, tasks => ({ tasks: [newTask, ...tasks] }));
       
       return res.status(200).json({ 
         success: true, 

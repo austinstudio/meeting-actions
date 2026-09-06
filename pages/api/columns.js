@@ -3,6 +3,7 @@
 // Default columns are global, custom columns are per-user
 
 import { kv } from '@vercel/kv';
+import { updateTasks } from '../../lib/task-store.mjs';
 import { requireAuth } from '../../lib/auth';
 
 const DEFAULT_COLUMNS = [
@@ -200,7 +201,6 @@ export default async function handler(req, res) {
       }
 
       let allColumns = await kv.get('columns') || [];
-      let tasks = await kv.get('tasks') || [];
 
       // Verify the column belongs to this user
       const columnToDelete = allColumns.find(c => c.id === columnId && c.userId === userId);
@@ -208,19 +208,15 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'Column not found' });
       }
 
-      // Move user's tasks from deleted column to 'uncategorized'
-      tasks = tasks.map(t => {
-        if (t.userId === userId && t.status === columnId) {
-          return { ...t, status: 'uncategorized' };
-        }
-        return t;
-      });
+      // Move user's tasks from deleted column to 'uncategorized' (compare-and-set, lib/task-store.mjs)
+      await updateTasks(kv, tasks => ({
+        tasks: tasks.map(t => (t.userId === userId && t.status === columnId) ? { ...t, status: 'uncategorized' } : t),
+      }));
 
       // Remove the column
       allColumns = allColumns.filter(c => c.id !== columnId);
 
       await kv.set('columns', allColumns);
-      await kv.set('tasks', tasks);
 
       // Drop the deleted column from the user's saved order, if present,
       // so the next GET doesn't try to position a non-existent column.

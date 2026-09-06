@@ -5,6 +5,7 @@
 // moves it to the Done or Failures column based on outcome.
 
 import { kv } from '@vercel/kv';
+import { updateTasks } from '../../../lib/task-store.mjs';
 
 const VALID_OUTCOMES = new Set(['success', 'failed', 'needs_clarification', 'needs_deps']);
 const MAX_ACTIVITY = 50;
@@ -48,61 +49,64 @@ export default async function handler(req, res) {
   }
 
   try {
-    let tasks = await kv.get('tasks') || [];
     const issueNum = Number(issueNumber);
-    const taskIndex = tasks.findIndex(t => Number(t.githubIssueNumber) === issueNum);
+    const outcome = await updateTasks(kv, async tasks => {
+      const taskIndex = tasks.findIndex(t => Number(t.githubIssueNumber) === issueNum);
+      if (taskIndex === -1) return null;
 
-    if (taskIndex === -1) {
+      const task = tasks[taskIndex];
+      const previousStatus = task.status;
+
+      task.githubResolution = {
+        outcome,
+        summary: summary || null,
+        analysis: analysis || null,
+        resolvedAt: new Date().toISOString(),
+      };
+
+      // Move to Done on success, or the user's Failures column on failure.
+      // For needs_clarification / needs_deps we leave the task where it is
+      // because the user still has to act on it.
+      let targetStatus = null;
+      if (outcome === 'success') {
+        targetStatus = 'done';
+      } else if (outcome === 'failed') {
+        const allColumns = await kv.get('columns') || [];
+        const failuresCol = allColumns.find(
+          c => c.userId === task.userId && c.custom && c.label?.toLowerCase() === 'failures'
+        );
+        if (failuresCol) targetStatus = failuresCol.id;
+      }
+
+      if (targetStatus && targetStatus !== previousStatus) {
+        task.status = targetStatus;
+      }
+
+      if (!task.activity) task.activity = [];
+      task.activity.push(
+        createActivityEntry(
+          'auto-implement',
+          `Auto-implement outcome: ${outcome}${targetStatus ? ` (moved to ${targetStatus})` : ''}`
+        )
+      );
+      if (task.activity.length > MAX_ACTIVITY) {
+        task.activity = task.activity.slice(-MAX_ACTIVITY);
+      }
+
+      task.updatedAt = new Date().toISOString();
+
+      tasks[taskIndex] = task;
+      return { tasks, task, targetStatus, previousStatus };
+    });
+
+    if (!outcome) {
       return res.status(200).json({
         success: true,
         matched: false,
         message: `No task linked to issue #${issueNum}`,
       });
     }
-
-    const task = tasks[taskIndex];
-    const previousStatus = task.status;
-
-    task.githubResolution = {
-      outcome,
-      summary: summary || null,
-      analysis: analysis || null,
-      resolvedAt: new Date().toISOString(),
-    };
-
-    // Move to Done on success, or the user's Failures column on failure.
-    // For needs_clarification / needs_deps we leave the task where it is
-    // because the user still has to act on it.
-    let targetStatus = null;
-    if (outcome === 'success') {
-      targetStatus = 'done';
-    } else if (outcome === 'failed') {
-      const allColumns = await kv.get('columns') || [];
-      const failuresCol = allColumns.find(
-        c => c.userId === task.userId && c.custom && c.label?.toLowerCase() === 'failures'
-      );
-      if (failuresCol) targetStatus = failuresCol.id;
-    }
-
-    if (targetStatus && targetStatus !== previousStatus) {
-      task.status = targetStatus;
-    }
-
-    if (!task.activity) task.activity = [];
-    task.activity.push(
-      createActivityEntry(
-        'auto-implement',
-        `Auto-implement outcome: ${outcome}${targetStatus ? ` (moved to ${targetStatus})` : ''}`
-      )
-    );
-    if (task.activity.length > MAX_ACTIVITY) {
-      task.activity = task.activity.slice(-MAX_ACTIVITY);
-    }
-
-    task.updatedAt = new Date().toISOString();
-
-    tasks[taskIndex] = task;
-    await kv.set('tasks', tasks);
+    const { task, targetStatus, previousStatus } = outcome;
 
     return res.status(200).json({
       success: true,

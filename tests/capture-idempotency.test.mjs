@@ -9,6 +9,9 @@ import { promisify } from 'node:util';
 import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
 import { VercelKV } from '@vercel/kv';
 import * as idempotency from '../lib/capture-idempotency.mjs';
+import * as taskStore from '../lib/task-store.mjs';
+
+const { updateTasks, TaskStoreError, TASKS_CAS_SCRIPT, TASKS_VERSION_KEY } = taskStore;
 
 const { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, CaptureIdempotencyError } = idempotency;
 const CAPTURE_ID = '4dc8d1b7-2f24-424e-abcf-3a2777a919a0';
@@ -35,10 +38,23 @@ class MemoryKV {
     if (this.failRead) throw new Error('Synthetic connection failure');
     return this.values.has(key) ? JSON.parse(this.values.get(key)) : null;
   }
+  onBeforeEval = null;   // test hook: runs before a script executes, to interleave another writer
   async eval(script, keys, args) {
+    if (this.onBeforeEval) { const hook = this.onBeforeEval; this.onBeforeEval = null; await hook(script); }
+    if (script === TASKS_CAS_SCRIPT) {
+      // Models lib/task-store.mjs's compare-and-set; the Docker suite runs the actual Lua.
+      const [tasksKey, versionKey] = keys, [json, expected] = args;
+      const current = this.values.has(versionKey) ? String(JSON.parse(this.values.get(versionKey))) : '0';
+      if (current !== expected) return 0;
+      this.values.set(tasksKey, json);
+      this.values.set(versionKey, String(Number(current) + 1));
+      this.writes++;
+      return 1;
+    }
     assert.equal(script, idempotency.CAPTURE_COMMIT_SCRIPT);
     if (this.failBeforeCommit) throw new Error('Synthetic pre-commit failure');
-    const [receiptKey, meetingsKey, tasksKey, transcriptKey] = keys;
+    const [receiptKey, meetingsKey, tasksKey, transcriptKey, versionKey] = keys;
+    assert.equal(versionKey, TASKS_VERSION_KEY);
     const previous = this.values.has(receiptKey) ? JSON.parse(this.values.get(receiptKey)) : null;
     if (previous) return previous.fingerprint === args[0] ? ['replay', previous.response] : ['conflict'];
     const meetings = JSON.parse(this.values.get(meetingsKey) || '[]');
@@ -49,6 +65,7 @@ class MemoryKV {
     this.values.set(tasksKey, JSON.stringify([...JSON.parse(args[2]), ...tasks]));
     this.values.set(transcriptKey, args[3]);
     this.values.set(receiptKey, args[4]);
+    this.values.set(versionKey, String((this.values.has(versionKey) ? Number(JSON.parse(this.values.get(versionKey))) : 0) + 1));
     this.writes++;
     if (this.failAfterCommit) {
       this.failAfterCommit = false;
@@ -79,7 +96,8 @@ async function routeHarness(kv) {
       const user = users[req.headers?.authorization];
       if (!user) res.status(401).json({ error: 'Authentication required' });
       return user || null;
-    } },
+    }, getUserName: async () => 'Test User' },
+    'task-store.mjs': taskStore,
     'meeting-store': { addMeetingWithTasks: async () => { calls.legacySave++; } },
     extract: {
       getKnownPeople: async () => [],
@@ -119,6 +137,7 @@ async function routeHarness(kv) {
   const structured = await load('../pages/api/capture/structured.js');
   return {
     calls,
+    load,
     async request(kind, { id = CAPTURE_ID, transcript = TRANSCRIPT, headers = {}, body = {}, authorized = true } = {}) {
       const req = { method: 'POST', headers: {
         ...(authorized ? kind === 'quick' ? { 'x-capture-secret': 'test-secret' } : { authorization: 'Bearer test-one' } : {}),
@@ -299,6 +318,95 @@ describe('capture HTTP routes', () => {
   });
 });
 
+describe('tasks compare-and-set store', () => {
+  const seed = (kv, tasks) => kv.values.set('tasks', JSON.stringify(tasks));
+
+  test('writes the mutation and bumps the version', async () => {
+    const kv = new MemoryKV();
+    seed(kv, [{ id: 'a', status: 'todo' }]);
+    const outcome = await updateTasks(kv, tasks => ({ tasks: tasks.map(t => ({ ...t, status: 'done' })), touched: tasks.length }));
+    assert.equal(outcome.touched, 1);
+    assert.deepEqual(await kv.get('tasks'), [{ id: 'a', status: 'done' }]);
+    assert.equal(await kv.get(TASKS_VERSION_KEY), 1);
+  });
+
+  test('returning null writes nothing', async () => {
+    const kv = new MemoryKV();
+    seed(kv, [{ id: 'a' }]);
+    assert.equal(await updateTasks(kv, () => null), null);
+    assert.equal(kv.writes, 0);
+    assert.equal(await kv.get(TASKS_VERSION_KEY), null);
+  });
+
+  test('a write that lands between read and commit is not overwritten: the mutation re-runs on fresh data', async () => {
+    const kv = new MemoryKV();
+    seed(kv, [{ id: 'a', status: 'todo' }]);
+    let runs = 0;
+    kv.onBeforeEval = async () => {
+      // Another writer (a capture) appends while our update is in flight.
+      const current = JSON.parse(kv.values.get('tasks'));
+      kv.values.set('tasks', JSON.stringify([{ id: 'captured', status: 'todo' }, ...current]));
+      kv.values.set(TASKS_VERSION_KEY, '1');
+    };
+    await updateTasks(kv, tasks => { runs++; return { tasks: tasks.map(t => t.id === 'a' ? { ...t, status: 'done' } : t) }; });
+    assert.equal(runs, 2);
+    const tasks = await kv.get('tasks');
+    assert.deepEqual(tasks.map(t => t.id), ['captured', 'a']);
+    assert.equal(tasks.find(t => t.id === 'a').status, 'done');
+    assert.equal(await kv.get(TASKS_VERSION_KEY), 2);
+  });
+
+  test('gives up with a typed error when writers keep colliding', async () => {
+    const kv = new MemoryKV();
+    seed(kv, []);
+    const colliding = { ...kv, get: kv.get.bind(kv), eval: async () => { kv.values.set(TASKS_VERSION_KEY, String(Math.random())); return 0; } };
+    await assert.rejects(updateTasks(colliding, tasks => ({ tasks }), { attempts: 2 }),
+      error => error instanceof TaskStoreError && error.code === 'tasks_write_conflict');
+  });
+
+  test('refuses to write an array at the KV request limit', async () => {
+    const kv = new MemoryKV();
+    seed(kv, []);
+    await assert.rejects(updateTasks(kv, () => ({ tasks: [{ pad: 'x'.repeat(10 * 1024 * 1024) }] })),
+      error => error instanceof TaskStoreError && error.code === 'tasks_too_large');
+    assert.equal(kv.writes, 0);
+  });
+});
+
+describe('Board edits against in-flight captures', () => {
+  async function patchTask(routes, id, body) {
+    const handler = await routes.load('../pages/api/tasks/[id].js');
+    const res = response();
+    await handler({ method: 'PATCH', query: { id }, headers: { authorization: 'Bearer test-one' }, body }, res);
+    return res;
+  }
+
+  test('a task edit cannot erase a capture committed between its read and its write', async () => {
+    const kv = new MemoryKV(), routes = await routeHarness(kv);
+    assert.equal((await routes.request('structured')).statusCode, 200);
+    const [existing] = await kv.get('tasks');
+    // The moment the PATCH handler tries to commit, a second capture lands first.
+    kv.onBeforeEval = async script => {
+      assert.equal(script, TASKS_CAS_SCRIPT);
+      assert.equal((await routes.request('structured', { id: OTHER_ID, transcript: 'Second memo.' })).statusCode, 200);
+    };
+    const res = await patchTask(routes, existing.id, { status: 'done' });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.task.status, 'done');
+    const tasks = await kv.get('tasks');
+    assert.equal(tasks.length, 2, 'the capture that landed mid-edit must survive');
+    assert.equal(tasks.find(t => t.id === existing.id).status, 'done');
+    assert.equal(await kv.get(TASKS_VERSION_KEY), 3);   // two captures + one edit
+  });
+
+  test('editing a missing task is a 404 and writes nothing', async () => {
+    const kv = new MemoryKV(), routes = await routeHarness(kv);
+    const res = await patchTask(routes, 't_missing', { status: 'done' });
+    assert.equal(res.statusCode, 404);
+    assert.equal(kv.writes, 0);
+  });
+});
+
 describe('actual Redis atomic commit', { skip: process.env.CAPTURE_REDIS_TESTS !== '1' }, () => {
   const run = promisify(execFile);
   let container;
@@ -338,6 +446,27 @@ describe('actual Redis atomic commit', { skip: process.env.CAPTURE_REDIS_TESTS !
     assert.deepEqual(await kv.get(`meeting:${capture.meetingID}:transcript`), { text: TRANSCRIPT });
     assert.deepEqual(await findCaptureResponse(kv, capture), results[0]);
     assert.equal(await command('TTL', capture.key), -1);
+  });
+
+  test('compare-and-set task updates retry past a concurrent capture commit (real Lua)', async () => {
+    const first = identity();
+    await commitCapture(kv, first, records(first, { task: 'First' }));
+    assert.equal(await command('GET', TASKS_VERSION_KEY), '1');
+    let interleaved = false;
+    await updateTasks(kv, async tasks => {
+      if (!interleaved) {
+        interleaved = true;
+        const second = identity(OTHER_ID);
+        await commitCapture(kv, second, records(second, { task: 'Second' }));
+      }
+      return { tasks: tasks.map(t => ({ ...t, status: 'done' })) };
+    });
+    const tasks = await kv.get('tasks');
+    assert.equal(tasks.length, 2);
+    assert.deepEqual(tasks.map(t => t.status).sort(), ['done', 'done']);   // re-ran against both captures
+    assert.equal(await command('GET', TASKS_VERSION_KEY), '3');
+    assert.equal(await updateTasks(kv, () => null), null);
+    assert.equal(await command('GET', TASKS_VERSION_KEY), '3');
   });
 
   test('commits against multi-megabyte existing arrays without Lua pattern limits', async () => {

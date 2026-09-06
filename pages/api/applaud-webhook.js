@@ -32,12 +32,7 @@ async function getMeetings() {
   try { return (await kv.get('meetings')) || []; }
   catch (e) { console.error('KV get meetings error:', e); return []; }
 }
-async function getTasks() {
-  try { return (await kv.get('tasks')) || []; }
-  catch (e) { console.error('KV get tasks error:', e); return []; }
-}
 async function saveMeetings(meetings) { await kv.set('meetings', meetings); }
-async function saveTasks(tasks) { await kv.set('tasks', tasks); }
 
 function getExtractionPrompt() {
   return `You are an expert executive assistant skilled at identifying genuine, actionable commitments from various sources. Your job is to extract ONLY real action items — not discussion topics, ideas mentioned in passing, or general observations.
