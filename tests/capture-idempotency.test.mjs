@@ -340,6 +340,31 @@ describe('actual Redis atomic commit', { skip: process.env.CAPTURE_REDIS_TESTS !
     assert.equal(await command('TTL', capture.key), -1);
   });
 
+  test('commits against multi-megabyte existing arrays without Lua pattern limits', async () => {
+    // Production hit "pattern/input too complex" once the tasks array passed ~1 MB. Build the arrays inside
+    // Redis (docker exec cannot carry values this large as arguments) and verify by inspecting in Lua.
+    const build = `
+      local item = '{"id":"old","pad":"' .. string.rep('a', 500) .. '"},'
+      local tasks = '[' .. string.rep(item, 4000) .. '{"id":"last-task"}]'
+      redis.call('SET', KEYS[1], tasks)
+      redis.call('SET', KEYS[2], '[' .. string.rep('{"id":"m"},', 800) .. '{"id":"last-meeting"}]')
+      return #tasks`;
+    const size = await command('EVAL', build, 2, 'tasks', 'meetings');
+    assert.ok(size > 2_000_000, `expected > 2 MB of tasks, got ${size}`);
+    const capture = identity();
+    const result = await commitCapture(kv, capture, records(capture, { task: 'Large store' }));
+    assert.equal(result.success, true);
+    const inspect = `
+      local t = redis.call('GET', 'tasks'); local m = redis.call('GET', 'meetings')
+      return {string.sub(t, 1, 40), string.sub(t, -20), string.sub(m, 1, 40), string.sub(m, -23)}`;
+    const [tHead, tTail, mHead, mTail] = await command('EVAL', inspect, 0);
+    assert.match(tHead, /^\[\{"id":"t_capture_/);
+    assert.ok(tTail.endsWith('{"id":"last-task"}]'), tTail);
+    assert.match(mHead, /^\[\{"id":"m_capture_/);
+    assert.ok(mTail.endsWith('{"id":"last-meeting"}]'), mTail);
+    assert.deepEqual(await findCaptureResponse(kv, capture), result);
+  });
+
   test('distinct simultaneous commits preserve existing raw JSON and append both captures', async () => {
     const existingTasks = '[{"id":"existing","nested":[],"precise":900719925474099312345}]';
     await command('SET', 'tasks', existingTasks);
