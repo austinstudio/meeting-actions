@@ -91,6 +91,7 @@ export default withIngestAlert('capture-structured', async (req, res) => {
   try {
     return await handler(req, res);
   } catch (error) {
+    if (error?.status === 503) await notifyIngestFailure('capture-structured', error, { code: error.code, source: req.body?.source });
     if (sendCaptureError(error, res)) return;
     throw error;
   }

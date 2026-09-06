@@ -95,6 +95,7 @@ export default async function handler(req, res) {
     console.log(`Quick capture: extracted ${newTasks.length} tasks`);
     return res.status(200).json(response);
   } catch (error) {
+    if (error?.status === 503) await notifyIngestFailure('quick-capture', error, { code: error.code, source: req.body?.source });
     if (sendCaptureError(error, res)) return;
     console.error('Quick capture error:', error);
     await notifyIngestFailure('quick-capture', error, { source: req.body?.source, chars: (req.body?.text || '').length });

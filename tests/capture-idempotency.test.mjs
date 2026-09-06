@@ -289,11 +289,12 @@ describe('capture HTTP routes', () => {
     const kv = new MemoryKV(), routes = await routeHarness(kv);
     const bad = await routes.request('quick', { body: { captureID: OTHER_ID } });
     assert.equal(bad.statusCode, 400);
+    assert.equal(routes.calls.alerts, 0);          // a client mistake is not an operator alert
     kv.failRead = true;
     const unavailable = await routes.request('quick');
     assert.equal(unavailable.statusCode, 503);
     assert.equal(routes.calls.parse, 0);
-    assert.equal(routes.calls.alerts, 0);
+    assert.equal(routes.calls.alerts, 1);          // storage outages page the operator (ntfy)
     assert.equal(kv.writes, 0);
   });
 });
