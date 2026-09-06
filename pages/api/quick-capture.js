@@ -7,24 +7,12 @@ import { kv } from '@vercel/kv';
 import { addMeetingWithTasks } from '../../lib/meeting-store';
 import { getKnownPeople, extractWithGemini, buildTaskRecords, localDateOrToday } from '../../lib/extract';
 import { notifyIngestFailure } from '../../lib/alerts';
-
-// KV helpers (same pattern as webhook.js / inbound-email.js)
-async function getMeetings() {
-  try { return (await kv.get('meetings')) || []; }
-  catch (e) { console.error('KV get meetings error:', e); return []; }
-}
-async function getTasks() {
-  try { return (await kv.get('tasks')) || []; }
-  catch (e) { console.error('KV get tasks error:', e); return []; }
-}
-async function saveMeetings(meetings) { await kv.set('meetings', meetings); }
-async function saveTasks(tasks) { await kv.set('tasks', tasks); }
-
+import { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, sendCaptureError } from '../../lib/capture-idempotency.mjs';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Capture-Secret');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Capture-Secret, Idempotency-Key');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   if (req.method !== 'POST') {
@@ -47,12 +35,15 @@ export default async function handler(req, res) {
   try {
     const { text, source } = req.body || {};
 
-    if (!text || !text.trim()) {
+    if (typeof text !== 'string' || !text.trim()) {
       return res.status(400).json({ error: 'No text provided' });
     }
 
     const trimmedText = text.trim();
     const sourceLabel = source || 'Quick Capture';
+    const capture = captureIdentity(req, userId, trimmedText);
+    const previous = await findCaptureResponse(kv, capture);
+    if (previous) return res.status(200).json(previous);
 
     console.log(`Quick capture: ${trimmedText.length} chars from "${sourceLabel}"`);
 
@@ -72,7 +63,7 @@ export default async function handler(req, res) {
     }
 
     // Store meeting and tasks in KV
-    const meetingId = `m_${Date.now()}`;
+    const meetingId = capture?.meetingID || `m_${Date.now()}`;
     const meetingTitle = extracted.meeting?.title || `${sourceLabel}: Captured Text`;
     const meetingDate = localDateOrToday(req.body?.localDate);
 
@@ -90,20 +81,21 @@ export default async function handler(req, res) {
       processedAt: new Date().toISOString()
     };
 
-    const newTasks = buildTaskRecords(extracted.tasks, { userId, meetingId, sourceLabel });
-
-    // Transcript is stored in its own key; metadata + tasks are appended to the arrays.
-    await addMeetingWithTasks(meeting, newTasks);
-
-    console.log(`Quick capture: extracted ${newTasks.length} tasks`);
-
-    return res.status(200).json({
+    const newTasks = captureTaskIDs(capture, buildTaskRecords(extracted.tasks, { userId, meetingId, sourceLabel }));
+    const response = {
       success: true,
       meeting,
       tasks: newTasks,
       message: `Extracted ${newTasks.length} action items from captured text`
-    });
+    };
+    if (capture) {
+      return res.status(200).json(await commitCapture(kv, capture, { meeting, tasks: newTasks, response }));
+    }
+    await addMeetingWithTasks(meeting, newTasks);
+    console.log(`Quick capture: extracted ${newTasks.length} tasks`);
+    return res.status(200).json(response);
   } catch (error) {
+    if (sendCaptureError(error, res)) return;
     console.error('Quick capture error:', error);
     await notifyIngestFailure('quick-capture', error, { source: req.body?.source, chars: (req.body?.text || '').length });
     return res.status(500).json({ error: 'Internal server error', details: error.message });

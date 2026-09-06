@@ -6,10 +6,12 @@
 //
 // Auth: Authorization: Bearer <token> (see lib/auth.js getBearerUserId).
 
+import { kv } from '@vercel/kv';
 import { requireAuth } from '../../../lib/auth';
 import { addMeetingWithTasks } from '../../../lib/meeting-store';
 import { getKnownPeople, extractWithGemini, buildTaskRecords, localDateOrToday } from '../../../lib/extract';
 import { notifyIngestFailure, withIngestAlert } from '../../../lib/alerts';
+import { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, sendCaptureError } from '../../../lib/capture-idempotency.mjs';
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -20,6 +22,9 @@ async function handler(req, res) {
   const body = req.body || {};
   const transcript = typeof body.transcript === 'string' ? body.transcript.trim() : '';
   if (!transcript) return res.status(400).json({ error: 'transcript is required' });
+  const capture = captureIdentity(req, userId, transcript);
+  const previous = await findCaptureResponse(kv, capture);
+  if (previous) return res.status(200).json(previous);
 
   const source = typeof body.source === 'string' && body.source ? body.source.slice(0, 40) : 'watch';
   const recordedAt = Number.isFinite(body.recordedAt) ? new Date(body.recordedAt) : new Date();
@@ -48,7 +53,7 @@ async function handler(req, res) {
     tasks = clientParse.tasks || []; parsedBy = clientParse.engine || 'client';
   }
 
-  const meetingId = `m_${Date.now()}`;
+  const meetingId = capture?.meetingID || `m_${Date.now()}`;
   const sourceLabel = source === 'watch' ? 'Watch capture' : `Capture: ${source}`;
   const meeting = {
     id: meetingId,
@@ -65,18 +70,28 @@ async function handler(req, res) {
     parsedBy,
     processedAt: new Date().toISOString(),
   };
-  const newTasks = buildTaskRecords(tasks, { userId, meetingId, sourceLabel });
-
-  await addMeetingWithTasks(meeting, newTasks);
-  console.log(`Structured capture (${parsedBy}): ${newTasks.length} tasks from ${source}`);
-
-  return res.status(200).json({
+  const newTasks = captureTaskIDs(capture, buildTaskRecords(tasks, { userId, meetingId, sourceLabel }));
+  const response = {
     success: true,
     parsedBy,
     meeting: { id: meetingId, title: meeting.title, summary: meeting.summary, date: meetingDate },
     tasks: newTasks,
     message: `Saved ${newTasks.length} task${newTasks.length === 1 ? '' : 's'}`,
-  });
+  };
+  if (body.dryRun === true) return res.status(200).json({ ...response, dryRun: true });
+  if (capture) {
+    return res.status(200).json(await commitCapture(kv, capture, { meeting, tasks: newTasks, response }));
+  }
+  await addMeetingWithTasks(meeting, newTasks);
+  console.log(`Structured capture (${parsedBy}): ${newTasks.length} tasks from ${source}`);
+  return res.status(200).json(response);
 }
 
-export default withIngestAlert('capture-structured', handler);
+export default withIngestAlert('capture-structured', async (req, res) => {
+  try {
+    return await handler(req, res);
+  } catch (error) {
+    if (sendCaptureError(error, res)) return;
+    throw error;
+  }
+});
