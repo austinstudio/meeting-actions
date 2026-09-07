@@ -7,7 +7,7 @@ import { kv } from '@vercel/kv';
 import { addMeetingWithTasks } from '../../lib/meeting-store';
 import { getKnownPeople, extractWithGemini, buildTaskRecords, localDateOrToday } from '../../lib/extract';
 import { notifyIngestFailure } from '../../lib/alerts';
-import { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, sendCaptureError } from '../../lib/capture-idempotency.mjs';
+import { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, sendCaptureError, dailyMeeting, captureEntryText } from '../../lib/capture-idempotency.mjs';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -63,25 +63,26 @@ export default async function handler(req, res) {
     }
 
     // Store meeting and tasks in KV
-    const meetingId = capture?.meetingID || `m_${Date.now()}`;
-    const meetingTitle = extracted.meeting?.title || `${sourceLabel}: Captured Text`;
     const meetingDate = localDateOrToday(req.body?.localDate);
+    // One meeting per local day for identified captures (see capture/structured.js); legacy requests keep one each.
+    const meeting = capture
+      ? dailyMeeting(capture, { userId, transcript: trimmedText, captureSource: source || 'watch' })
+      : {
+        id: `m_${Date.now()}`,
+        userId,
+        title: extracted.meeting?.title || `${sourceLabel}: Captured Text`,
+        sourceFileName: sourceLabel,
+        transcript: trimmedText,
+        date: meetingDate,
+        duration: extracted.meeting?.duration || null,
+        participants: extracted.meeting?.participants || [],
+        summary: extracted.meeting?.summary || '',
+        source: 'quick-capture',
+        processedAt: new Date().toISOString()
+      };
+    const meetingId = meeting.id;
 
-    const meeting = {
-      id: meetingId,
-      userId,
-      title: meetingTitle,
-      sourceFileName: sourceLabel,
-      transcript: trimmedText,
-      date: meetingDate,
-      duration: extracted.meeting?.duration || null,
-      participants: extracted.meeting?.participants || [],
-      summary: extracted.meeting?.summary || '',
-      source: 'quick-capture',
-      processedAt: new Date().toISOString()
-    };
-
-    const newTasks = captureTaskIDs(capture, buildTaskRecords(extracted.tasks, { userId, meetingId, sourceLabel }));
+    const newTasks = captureTaskIDs(capture, buildTaskRecords(extracted.tasks, { userId, meetingId, sourceLabel, tags: ['watch'] }));
     const response = {
       success: true,
       meeting,
@@ -89,7 +90,8 @@ export default async function handler(req, res) {
       message: `Extracted ${newTasks.length} action items from captured text`
     };
     if (capture) {
-      return res.status(200).json(await commitCapture(kv, capture, { meeting, tasks: newTasks, response }));
+      const transcriptEntry = captureEntryText(trimmedText, req.body?.recordedAt, typeof req.body?.timeZone === 'string' ? req.body.timeZone : undefined);
+      return res.status(200).json(await commitCapture(kv, capture, { meeting, tasks: newTasks, response, transcriptEntry }));
     }
     await addMeetingWithTasks(meeting, newTasks);
     console.log(`Quick capture: extracted ${newTasks.length} tasks`);

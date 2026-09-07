@@ -13,7 +13,7 @@ import * as taskStore from '../lib/task-store.mjs';
 
 const { updateTasks, TaskStoreError, TASKS_CAS_SCRIPT, TASKS_VERSION_KEY } = taskStore;
 
-const { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, CaptureIdempotencyError } = idempotency;
+const { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, CaptureIdempotencyError, dailyMeetingTitle, captureEntryText } = idempotency;
 const CAPTURE_ID = '4dc8d1b7-2f24-424e-abcf-3a2777a919a0';
 const OTHER_ID = '271c391b-346b-45e0-95df-aa3c4c625671';
 const TRANSCRIPT = 'Send the report tomorrow.';
@@ -61,9 +61,13 @@ class MemoryKV {
     const tasks = JSON.parse(this.values.get(tasksKey) || '[]');
     if (!Array.isArray(meetings) || !Array.isArray(tasks)) return ['unavailable'];
     // This fake models one atomic commit; the Docker suite below tests the actual Lua script.
-    this.values.set(meetingsKey, JSON.stringify([JSON.parse(args[1]), ...meetings]));
+    const meta = JSON.parse(args[1]);
+    if (tasks.some(t => typeof t.id === 'string' && t.id.startsWith(args[6]))) return ['unavailable'];
+    const meetingExists = meetings.some(m => m.id === meta.id);
+    if (!meetingExists) this.values.set(meetingsKey, JSON.stringify([meta, ...meetings]));
     this.values.set(tasksKey, JSON.stringify([...JSON.parse(args[2]), ...tasks]));
-    this.values.set(transcriptKey, args[3]);
+    const previousTranscript = meetingExists && this.values.has(transcriptKey) ? JSON.parse(this.values.get(transcriptKey)).text : null;
+    this.values.set(transcriptKey, previousTranscript === null ? args[3] : JSON.stringify({ text: `${previousTranscript}\n\n${JSON.parse(args[3]).text}` }));
     this.values.set(receiptKey, args[4]);
     this.values.set(versionKey, String((this.values.has(versionKey) ? Number(JSON.parse(this.values.get(versionKey))) : 0) + 1));
     this.writes++;
@@ -107,8 +111,8 @@ async function routeHarness(kv) {
         await Promise.resolve();
         return { extracted: { meeting: { title: 'Server report', summary: 'A report' }, tasks: [{ task: 'Server task' }] } };
       },
-      buildTaskRecords: (tasks, { userId, meetingId }) => (tasks || []).map((task, index) => ({
-        ...task, id: `t_same_millisecond_${index}`, userId, meetingId, activity: [],
+      buildTaskRecords: (tasks, { userId, meetingId, tags = [] }) => (tasks || []).map((task, index) => ({
+        ...task, id: `t_same_millisecond_${index}`, userId, meetingId, tags: [...tags], activity: [],
       })),
     },
     alerts: {
@@ -160,6 +164,8 @@ describe('capture identity', () => {
     assert.deepEqual(capture, identity());
     assert.notEqual(identity(CAPTURE_ID, 'user-two').key, capture.key);
     assert.notEqual(identity(CAPTURE_ID, 'user-two').meetingID, capture.meetingID);
+    assert.equal(capture.meetingID, identity(OTHER_ID).meetingID);          // same user, same day: one meeting
+    assert.match(capture.meetingID, /^m_capture_day_[0-9a-f]{16}_\d{4}-\d{2}-\d{2}$/);
     assert.notEqual(identity(CAPTURE_ID, 'user-one', 'Different memo').fingerprint, capture.fingerprint);
   });
 
@@ -225,7 +231,7 @@ describe('capture HTTP routes', () => {
     assert.equal(kv.writes, 1);
     assert.equal((await kv.get('meetings')).length, 1);
     assert.equal((await kv.get('tasks')).length, 1);
-    assert.equal((await kv.get(`meeting:${retry.body.meeting.id}:transcript`)).text, TRANSCRIPT);
+    assert.match((await kv.get(`meeting:${retry.body.meeting.id}:transcript`)).text, /^\[\d{1,2}:\d{2} (AM|PM)\] Send the report tomorrow\.$/);
   });
 
   test('a pre-commit failure writes nothing and permits retry with the same ID', async () => {
@@ -269,12 +275,50 @@ describe('capture HTTP routes', () => {
     assert.equal((await kv.get('meetings')).length, 2);
   });
 
-  test('distinct concurrent captures keep both meetings and unique task IDs', async () => {
+  test('distinct concurrent captures share the day\'s meeting and keep unique task IDs', async () => {
     const kv = new MemoryKV(), routes = await routeHarness(kv);
     const [first, second] = await Promise.all([routes.request('structured'), routes.request('structured', { id: OTHER_ID })]);
     assert.notEqual(first.body.tasks[0].id, second.body.tasks[0].id);
-    assert.equal((await kv.get('meetings')).length, 2);
+    assert.equal(first.body.meeting.id, second.body.meeting.id);
+    assert.equal((await kv.get('meetings')).length, 1);
     assert.equal((await kv.get('tasks')).length, 2);
+  });
+
+  test('captures on the same local day share one dated meeting, tagged tasks, and a transcript log', async () => {
+    const kv = new MemoryKV(), routes = await routeHarness(kv);
+    const first = await routes.request('structured');
+    const second = await routes.request('structured', { id: OTHER_ID, transcript: 'Book the dentist.', body: { recordedAt: 1788620400000, timeZone: 'America/Chicago' } });
+    assert.equal(first.statusCode, 200);
+    assert.equal(second.statusCode, 200);
+    const meetings = await kv.get('meetings');
+    assert.equal(meetings.length, 1);
+    assert.equal(meetings[0].title, 'Quick captures — Sep 5, 2026');
+    assert.equal(meetings[0].date, '2026-09-05');
+    assert.equal(meetings[0].sourceFileName, 'Quick Notes');
+    assert.equal(first.body.meeting.title, meetings[0].title);
+    const tasks = await kv.get('tasks');
+    assert.equal(tasks.length, 2);
+    assert.ok(tasks.every(t => t.meetingId === meetings[0].id && Array.isArray(t.tags) && t.tags.includes('watch')));
+    const log = (await kv.get(`meeting:${meetings[0].id}:transcript`)).text.split('\n\n');
+    assert.equal(log.length, 2);
+    assert.match(log[0], /^\[\d{1,2}:\d{2} (AM|PM)\] Send the report tomorrow\.$/);
+    assert.equal(log[1], '[10:00 AM] Book the dentist.');   // 2026-09-05T15:00Z in Chicago
+  });
+
+  test('captures on different local days get different meetings', async () => {
+    const kv = new MemoryKV(), routes = await routeHarness(kv);
+    await routes.request('structured');
+    const next = await routes.request('structured', { id: OTHER_ID, transcript: 'Tomorrow memo.', body: { localDate: '2026-09-06' } });
+    assert.equal(next.statusCode, 200);
+    assert.equal(next.body.meeting.title, 'Quick captures — Sep 6, 2026');
+    assert.equal((await kv.get('meetings')).length, 2);
+    assert.deepEqual((await kv.get('meetings')).map(m => m.date).sort(), ['2026-09-05', '2026-09-06']);
+  });
+
+  test('titles and transcript entries are formatted from the recording day and zone', () => {
+    assert.equal(dailyMeetingTitle('2026-12-31'), 'Quick captures — Dec 31, 2026');
+    assert.equal(captureEntryText('Call the vet', Date.UTC(2026, 8, 7, 1, 5), 'America/Chicago'), '[8:05 PM] Call the vet');
+    assert.equal(captureEntryText('Call the vet', Date.UTC(2026, 8, 7, 1, 5), 'Not/AZone'), '[1:05 AM] Call the vet');
   });
 
   test('dryRun bypasses existing receipts and never writes through either route', async () => {
@@ -500,11 +544,22 @@ describe('actual Redis atomic commit', { skip: process.env.CAPTURE_REDIS_TESTS !
     await command('SET', 'meetings', '[{"id":"existing","participants":[]}]');
     const first = identity(), second = identity(OTHER_ID);
     await Promise.all([commitCapture(kv, first, records(first)), commitCapture(kv, second, records(second))]);
-    assert.equal((await kv.get('meetings')).length, 3);
+    assert.equal((await kv.get('meetings')).length, 2);    // the existing one plus today's shared capture meeting
     assert.equal((await kv.get('tasks')).length, 3);
     assert.ok((await command('GET', 'tasks')).includes('"precise":900719925474099312345'));
     assert.ok((await command('GET', 'tasks')).includes('"nested":[]'));
     assert.deepEqual((await kv.get('meetings'))[0].participants, []);
+  });
+
+  test('a second capture on the same day appends to the transcript log in Lua without touching the meeting', async () => {
+    const first = identity(), second = identity(OTHER_ID, 'user-one', 'Second memo.');
+    await commitCapture(kv, first, records(first));
+    const before = await command('GET', 'meetings');
+    await commitCapture(kv, second, { ...records(second, { task: 'Second task', transcript: 'Second memo.' }), transcriptEntry: '[4:00 PM] Second memo.' });
+    assert.equal(await command('GET', 'meetings'), before);              // metadata byte-identical
+    assert.equal((await kv.get('tasks')).length, 2);
+    assert.deepEqual(await kv.get(`meeting:${first.meetingID}:transcript`), { text: `${TRANSCRIPT}\n\n[4:00 PM] Second memo.` });
+    assert.equal(await command('GET', TASKS_VERSION_KEY), '2');
   });
 
   test('response loss after the real transaction is recoverable without another write', async () => {

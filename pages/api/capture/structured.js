@@ -11,7 +11,7 @@ import { requireAuth } from '../../../lib/auth';
 import { addMeetingWithTasks } from '../../../lib/meeting-store';
 import { getKnownPeople, extractWithGemini, buildTaskRecords, localDateOrToday } from '../../../lib/extract';
 import { notifyIngestFailure, withIngestAlert } from '../../../lib/alerts';
-import { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, sendCaptureError } from '../../../lib/capture-idempotency.mjs';
+import { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, sendCaptureError, dailyMeeting, captureEntryText } from '../../../lib/capture-idempotency.mjs';
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -53,34 +53,39 @@ async function handler(req, res) {
     tasks = clientParse.tasks || []; parsedBy = clientParse.engine || 'client';
   }
 
-  const meetingId = capture?.meetingID || `m_${Date.now()}`;
   const sourceLabel = source === 'watch' ? 'Watch capture' : `Capture: ${source}`;
-  const meeting = {
-    id: meetingId,
-    userId,
-    title: (typeof title === 'string' && title.trim()) ? title.trim().slice(0, 140) : `${sourceLabel}: ${transcript.slice(0, 60)}`,
-    sourceFileName: sourceLabel,
-    transcript,
-    date: meetingDate,
-    duration: Number.isFinite(body.durationMs) ? Math.round(body.durationMs / 1000) : null,
-    participants: [],
-    summary: typeof summary === 'string' ? summary.slice(0, 2000) : '',
-    source: 'quick-capture',
-    captureSource: source,
-    parsedBy,
-    processedAt: new Date().toISOString(),
-  };
-  const newTasks = captureTaskIDs(capture, buildTaskRecords(tasks, { userId, meetingId, sourceLabel }));
+  // Captures with an ID share one meeting per local day ("Quick captures — Sep 7, 2026"); each capture's
+  // transcript is appended to that day's transcript log. Legacy requests without an ID keep a meeting each.
+  const meeting = capture
+    ? dailyMeeting(capture, { userId, transcript, captureSource: source, parsedBy })
+    : {
+      id: `m_${Date.now()}`,
+      userId,
+      title: (typeof title === 'string' && title.trim()) ? title.trim().slice(0, 140) : `${sourceLabel}: ${transcript.slice(0, 60)}`,
+      sourceFileName: sourceLabel,
+      transcript,
+      date: meetingDate,
+      duration: Number.isFinite(body.durationMs) ? Math.round(body.durationMs / 1000) : null,
+      participants: [],
+      summary: typeof summary === 'string' ? summary.slice(0, 2000) : '',
+      source: 'quick-capture',
+      captureSource: source,
+      parsedBy,
+      processedAt: new Date().toISOString(),
+    };
+  const meetingId = meeting.id;
+  const newTasks = captureTaskIDs(capture, buildTaskRecords(tasks, { userId, meetingId, sourceLabel, tags: ['watch'] }));
   const response = {
     success: true,
     parsedBy,
-    meeting: { id: meetingId, title: meeting.title, summary: meeting.summary, date: meetingDate },
+    meeting: { id: meetingId, title: meeting.title, summary: meeting.summary, date: meeting.date },
     tasks: newTasks,
     message: `Saved ${newTasks.length} task${newTasks.length === 1 ? '' : 's'}`,
   };
   if (body.dryRun === true) return res.status(200).json({ ...response, dryRun: true });
   if (capture) {
-    return res.status(200).json(await commitCapture(kv, capture, { meeting, tasks: newTasks, response }));
+    const transcriptEntry = captureEntryText(transcript, body.recordedAt, typeof body.timeZone === 'string' ? body.timeZone : undefined);
+    return res.status(200).json(await commitCapture(kv, capture, { meeting, tasks: newTasks, response, transcriptEntry }));
   }
   await addMeetingWithTasks(meeting, newTasks);
   console.log(`Structured capture (${parsedBy}): ${newTasks.length} tasks from ${source}`);
