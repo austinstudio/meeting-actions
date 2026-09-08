@@ -135,6 +135,20 @@ function seededKV() {
 }
 
 describe('computeTriageStats', () => {
+  test('trashing a task that was still in the inbox counts as a clear; trashing a triaged task does not', () => {
+    const now = new Date('2026-09-08T15:00:00Z');
+    const tasks = [
+      { id: 't1', userId: 'user-one', status: 'uncategorized', deleted: true,
+        activity: [{ type: 'delete', field: null, oldValue: null, newValue: 'moved to trash', timestamp: '2026-09-08T14:00:00Z' }] },
+      { id: 't2', userId: 'user-one', status: 'todo', deleted: true,
+        activity: [{ type: 'update', field: 'status', oldValue: 'uncategorized', newValue: 'todo', timestamp: '2026-09-07T10:00:00Z' },
+                   { type: 'delete', field: null, oldValue: null, newValue: 'moved to trash', timestamp: '2026-09-08T14:00:00Z' }] },
+    ];
+    const stats = computeTriageStats(tasks, 'user-one', { now, tz: 'UTC' });
+    assert.deepEqual(stats.clearedByDay, { '2026-09-08': 1, '2026-09-07': 1 });
+    assert.equal(stats.cleared30Days, 2);
+  });
+
   test('counts inbox clears per local day and totals them', () => {
     const tasks = [
       task('a', { status: 'todo', activity: [clear('2026-09-08T10:00:00Z')] }),
