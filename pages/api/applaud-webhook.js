@@ -1,6 +1,6 @@
 // pages/api/applaud-webhook.js
-// Receives transcript_ready webhooks from a local Applaud instance and
-// extracts action items using Gemini — same pipeline as quick-capture.js.
+// Receives transcript_ready webhooks from the owner's local Applaud instance and
+// extracts action items with Gemini (lib/extract.js) — same pipeline as inbound-email.js.
 //
 // Auth: HMAC-SHA256 on the raw request body via X-Applaud-Signature header.
 // Set APPLAUD_WEBHOOK_SECRET in Vercel to the same value you set in
@@ -10,14 +10,16 @@
 //   GEMINI_API_KEY           — Google Gemini API key
 //   INBOUND_EMAIL_USER_ID    — next-auth user ID to attribute tasks to
 //   APPLAUD_WEBHOOK_SECRET   — (optional but recommended) shared HMAC secret
+//   APPLAUD_ACCEPT_AFTER     — (optional) ISO date; recordings that started before it are skipped
+//
+// Sep 2026: the Gemini + meeting-building block was accidentally dropped in the v5.8 commit, so every
+// transcript 500'd with "meeting is not defined". It now lives in lib/extract.js + lib/applaud-ingest.mjs.
 
 import crypto from 'node:crypto';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { kv } from '@vercel/kv';
-import { addMeetingWithTasks, findMatchingMeeting } from '../../lib/meeting-store';
-import { withIngestAlert } from '../../lib/alerts';
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+import { addMeetingWithTasks, findMatchingMeeting, getMeetings } from '../../lib/meeting-store';
+import { extractWithGemini, getKnownPeople, buildTaskRecords } from '../../lib/extract';
+import { applaudMeetingDate, applaudMeetingRecord, findApplaudDuplicate } from '../../lib/applaud-ingest.mjs';
+import { withIngestAlert, notifyIngestFailure } from '../../lib/alerts';
 
 export const config = {
   api: {
@@ -27,96 +29,9 @@ export const config = {
   },
 };
 
-// KV helpers — same pattern as the rest of the app
-async function getMeetings() {
-  try { return (await kv.get('meetings')) || []; }
-  catch (e) { console.error('KV get meetings error:', e); return []; }
-}
-async function saveMeetings(meetings) { await kv.set('meetings', meetings); }
-
-function getExtractionPrompt() {
-  return `You are an expert executive assistant skilled at identifying genuine, actionable commitments from various sources. Your job is to extract ONLY real action items — not discussion topics, ideas mentioned in passing, or general observations.
-
-## CONTENT TYPE DETECTION
-First, identify what type of content this is:
-- **Meeting Transcript**: Conversation between multiple people, often with speaker labels
-- **Email**: Has sender/recipient info, subject line, formal structure
-- **Notes**: Personal notes, bullet points, informal jottings
-- **Document**: Formal document, specifications, requirements
-- **Chat/Slack**: Short messages, informal, often threaded
-
-Adapt your extraction based on the content type.
-
-## CRITICAL: What IS an Action Item
-
-An action item MUST have ALL of these characteristics:
-1. **Explicit commitment or request**: Someone states they WILL do something, or asks someone to do something
-2. **Specific and actionable**: Can be completed and checked off (not vague like "think about X")
-3. **Has an owner**: Someone took responsibility or was assigned (stated or clearly implied)
-4. **Has a deliverable**: Results in something tangible (email sent, document created, meeting scheduled, decision made)
-
-## Owner Detection Rules:
-
-### For Meeting Transcripts:
-- "I'll..." or "I will..." or "Let me..." → Owner is "Me" (the user)
-- "Can you..." or "Could you..." → Owner is the person being asked
-- "[Name] will..." → Owner is that person
-- Speaker labels like "Corey:" or "Speaker B:" help identify who said what
-
-### General:
-- "We need to..." with no specific person → Owner is "Me" (assume user responsibility)
-- If genuinely unclear, mark as "Unassigned"
-
-## Priority Detection:
-- HIGH: Blocking other work, urgent deadline (today, tomorrow, ASAP), explicitly marked urgent/important, client-facing, escalation
-- MEDIUM: Has a deadline within 1-2 weeks, important but not blocking
-- LOW: Nice to have, no specific deadline, internal cleanup tasks
-
-## Due Date Rules:
-- Use specific dates mentioned ("by Friday" → calculate actual date)
-- "EOD" or "end of day" → Today's date
-- "ASAP" → Tomorrow
-- No date mentioned → Estimate based on urgency (HIGH=2 days, MEDIUM=1 week, LOW=2 weeks)
-- Today's date is: ${new Date().toISOString().split('T')[0]}
-
-## Task Types (IMPORTANT):
-You may ONLY use these two types:
-- "action" - for tasks that can be completed independently
-- "follow-up" - for tasks requiring contact with another person
-
-DO NOT use "enhancement" or "bug" as types.
-
-Analyze the content and return ONLY valid JSON in this exact format:
-
-{
-  "meeting": {
-    "title": "Brief, descriptive title based on content",
-    "participants": ["Name 1", "Name 2"],
-    "summary": "2-3 sentence summary of key points and what action is needed",
-    "duration": null
-  },
-  "tasks": [
-    {
-      "task": "Clear, actionable description starting with a verb",
-      "owner": "Me|PersonName|Unassigned",
-      "dueDate": "YYYY-MM-DD",
-      "priority": "high|medium|low",
-      "type": "action|follow-up",
-      "person": "Name of person to follow up with (only if type is follow-up, otherwise null)",
-      "context": "Brief context explaining why this task exists (1 sentence)"
-    }
-  ]
-}
-
-IMPORTANT GUIDELINES:
-- Quality over quantity: 3 real action items beats 10 questionable ones
-- Every task must pass the "Can this be checked off as DONE?" test
-- Combine related micro-tasks into one
-- If content has no actionable items, return an empty tasks array
-
-CONTENT:
-`;
-}
+// Untitled pocket/accidental recordings produce a few words of transcript. There is nothing to
+// extract, and asking Gemini for JSON on them fails (500 + alert noise), so acknowledge and skip.
+const MIN_TRANSCRIPT_CHARS = 120;
 
 function verifySignature(rawBody, signature, secret) {
   if (!secret) return true; // No secret configured — allow through
@@ -129,6 +44,10 @@ function verifySignature(rawBody, signature, secret) {
   const b = Buffer.from(expected);
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+function skipped(res, reason, extra = {}) {
+  return res.status(200).json({ ok: true, skipped: true, reason, ...extra });
 }
 
 async function handler(req, res) {
@@ -148,23 +67,16 @@ async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
-  const { event, recording, content } = req.body;
+  const { event, recording, content } = req.body || {};
 
   // Only process transcript_ready events — audio_ready has no transcript yet
-  if (event !== 'transcript_ready') {
-    return res.status(200).json({ ok: true, skipped: true, reason: `event=${event}` });
-  }
+  if (event !== 'transcript_ready') return skipped(res, `event=${event}`);
 
-  const transcriptText = content?.transcript_text;
-  if (!transcriptText || !transcriptText.trim()) {
-    return res.status(200).json({ ok: true, skipped: true, reason: 'no transcript_text' });
-  }
-  // Untitled pocket/accidental recordings produce a few words of transcript. There is nothing to
-  // extract, and asking Gemini for JSON on them fails (500 + alert noise), so acknowledge and skip.
-  const MIN_TRANSCRIPT_CHARS = 120;
-  if (transcriptText.trim().length < MIN_TRANSCRIPT_CHARS) {
-    console.log(`Applaud webhook: skipping "${recording?.filename}" (${transcriptText.trim().length} chars, too short)`);
-    return res.status(200).json({ ok: true, skipped: true, reason: 'transcript too short', chars: transcriptText.trim().length });
+  const transcriptText = typeof content?.transcript_text === 'string' ? content.transcript_text.trim() : '';
+  if (!transcriptText) return skipped(res, 'no transcript_text');
+  if (transcriptText.length < MIN_TRANSCRIPT_CHARS) {
+    console.log(`Applaud webhook: skipping "${recording?.filename}" (${transcriptText.length} chars, too short)`);
+    return skipped(res, 'transcript too short', { chars: transcriptText.length });
   }
 
   const userId = (process.env.INBOUND_EMAIL_USER_ID || '').trim();
@@ -174,10 +86,9 @@ async function handler(req, res) {
   }
 
   const title = recording?.filename || 'Untitled Recording';
-  const startTimeMs = recording?.start_time_ms;
-  const meetingDate = startTimeMs
-    ? new Date(startTimeMs).toISOString().split('T')[0]
-    : new Date().toISOString().split('T')[0];
+  const startTimeMs = Number(recording?.start_time_ms) || null;
+  const durationMs = Number(recording?.duration_ms) || null;
+  const meetingDate = applaudMeetingDate(startTimeMs);
   const plaudRecordingId = recording?.id || null;
   const sourceLabel = `Applaud: ${title}`;
 
@@ -187,44 +98,56 @@ async function handler(req, res) {
   const acceptAfter = Date.parse(process.env.APPLAUD_ACCEPT_AFTER || '');
   if (!Number.isNaN(acceptAfter) && startTimeMs && startTimeMs < acceptAfter) {
     console.log(`Applaud webhook: skipping "${title}" (${meetingDate} is before APPLAUD_ACCEPT_AFTER)`);
-    return res.status(200).json({ ok: true, skipped: true, reason: 'before APPLAUD_ACCEPT_AFTER', meetingDate });
+    return skipped(res, 'before APPLAUD_ACCEPT_AFTER', { meetingDate });
   }
 
   // Idempotency: the same recording must never create two meetings.
-  //  1. Same Plaud recording id (Applaud replays / restarts).
+  //  1. Same Plaud recording id or start time (Applaud replays / restarts, local-cache → cloud id).
   //  2. Same day + same title as a meeting the Plaud AutoFlow email already created
   //     (email subjects are "[Plaud-AutoFlow] MM-DD <recording title>").
   const allMeetings = await getMeetings();
-  if (plaudRecordingId) {
-    const existing = allMeetings.find(m => m.plaudRecordingId === plaudRecordingId);
-    if (existing) {
-      console.log(`Applaud webhook: "${title}" already imported as ${existing.id}`);
-      return res.status(200).json({ ok: true, skipped: true, reason: 'duplicate plaudRecordingId', meeting: { id: existing.id, title: existing.title } });
-    }
+  const existing = findApplaudDuplicate(allMeetings, { plaudRecordingId, startTimeMs });
+  if (existing) {
+    console.log(`Applaud webhook: "${title}" already imported as ${existing.id}`);
+    return skipped(res, 'duplicate recording', { meeting: { id: existing.id, title: existing.title } });
   }
   const viaEmail = findMatchingMeeting(allMeetings, { title, date: meetingDate, sources: ['email'] });
   if (viaEmail) {
     console.log(`Applaud webhook: "${title}" matches email meeting ${viaEmail.id} (${viaEmail.date}); skipping`);
-    return res.status(200).json({ ok: true, skipped: true, reason: 'already imported via Plaud email', meeting: { id: viaEmail.id, title: viaEmail.title } });
+    return skipped(res, 'already imported via Plaud email', { meeting: { id: viaEmail.id, title: viaEmail.title } });
+  }
+
+  console.log(`Applaud webhook: processing "${title}" (${transcriptText.length} chars)`);
+  const people = await getKnownPeople(userId);
+  let extracted;
+  try {
+    ({ extracted } = await extractWithGemini(transcriptText, { people }));
+  } catch (err) {
+    // 502 so Applaud retries (5 s / 30 s / 2 min); the alert tells the owner if all three fail.
+    console.error('Applaud webhook: Gemini extraction failed:', err);
+    await notifyIngestFailure('applaud-webhook', err, { title, recordingId: plaudRecordingId });
+    return res.status(502).json({ error: 'Extraction failed', details: err instanceof Error ? err.message : String(err) });
   }
 
   // Re-check right before writing: Gemini takes several seconds, and Applaud's poller and
   // replay endpoint can deliver the same recording concurrently. The early check above
   // catches most duplicates; this one closes the race window.
-  if (plaudRecordingId) {
-    const raced = (await getMeetings()).find(m => m.plaudRecordingId === plaudRecordingId);
-    if (raced) {
-      console.log(`Applaud webhook: "${title}" was imported concurrently as ${raced.id}; skipping`);
-      return res.status(200).json({ ok: true, skipped: true, reason: 'duplicate plaudRecordingId (raced)', meeting: { id: raced.id, title: raced.title } });
-    }
+  const raced = findApplaudDuplicate(await getMeetings(), { plaudRecordingId, startTimeMs });
+  if (raced) {
+    console.log(`Applaud webhook: "${title}" was imported concurrently as ${raced.id}; skipping`);
+    return skipped(res, 'duplicate recording (raced)', { meeting: { id: raced.id, title: raced.title } });
   }
+
+  const meeting = applaudMeetingRecord({ userId, title, extracted, transcriptText, meetingDate, plaudRecordingId, startTimeMs, durationMs });
+  const newTasks = buildTaskRecords(extracted?.tasks, { userId, meetingId: meeting.id, sourceLabel, createdAt: meeting.processedAt });
+
   // Transcript is stored in its own key; metadata + tasks are appended to the arrays.
   await addMeetingWithTasks(meeting, newTasks);
 
-  console.log(`Applaud webhook: extracted ${newTasks.length} tasks from "${meetingTitle}"`);
+  console.log(`Applaud webhook: extracted ${newTasks.length} tasks from "${meeting.title}"`);
   return res.status(200).json({
     ok: true,
-    meeting: { id: meetingId, title: meetingTitle },
+    meeting: { id: meeting.id, title: meeting.title },
     taskCount: newTasks.length,
   });
 }
