@@ -102,7 +102,7 @@ async function routeHarness(kv) {
 }
 
 const NOW = new Date('2026-09-08T18:00:00Z');
-const TASK_FIELDS = ['id', 'task', 'status', 'archived', 'owner', 'dueDate', 'priority', 'type', 'person', 'meetingId', 'meetingTitle', 'createdAt', 'tags'];
+const TASK_FIELDS = ['id', 'task', 'status', 'archived', 'owner', 'dueDate', 'priority', 'type', 'person', 'meetingId', 'meetingTitle', 'createdAt', 'tags', 'context'];
 const clear = (timestamp, newValue = 'todo', extra = {}) =>
   ({ id: `act_${timestamp}`, type: 'update', field: 'status', oldValue: 'uncategorized', newValue, user: 'Test User', timestamp, ...extra });
 const task = (id, overrides = {}) => ({ id, userId: 'user-one', task: `Task ${id}`, status: 'uncategorized', activity: [], tags: ['watch'], ...overrides });
@@ -235,7 +235,7 @@ describe('GET /api/capture/inbox', () => {
     assert.deepEqual(res.body.tasks.map(t => t.id), ['oldest', 'middle', 'newest', 'no-date', 'bad-date']);
     assert.deepEqual(res.body.tasks[2], {
       id: 'newest', task: 'Task newest', status: 'uncategorized', archived: false, owner: 'Me', dueDate: '2026-09-10', priority: 'high',
-      type: 'follow-up', person: 'Sam', meetingId: 'm1', meetingTitle: 'Quick captures — Sep 7, 2026', createdAt: '2026-09-08T12:00:00Z', tags: ['watch'],
+      type: 'follow-up', person: 'Sam', meetingId: 'm1', meetingTitle: 'Quick captures — Sep 7, 2026', createdAt: '2026-09-08T12:00:00Z', tags: ['watch'], context: null,
     });
     for (const t of res.body.tasks) {
       assert.deepEqual(Object.keys(t), TASK_FIELDS);
