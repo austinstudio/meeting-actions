@@ -250,6 +250,21 @@ describe('GET /api/capture/inbox', () => {
     assert.deepEqual(res.body.triage, { clearedByDay: {}, cleared30Days: 0 });
   });
 
+  test('ids returns the named live tasks in the order asked, any status, without changing inboxCount', async () => {
+    const kv = new MemoryKV().seed('meetings', []).seed('tasks', [
+      task('newest', { createdAt: '2026-09-08T12:00:00Z' }), task('landed', { status: 'done' }),
+      task('a'), task('b'), task('c'), task('d'), task('theirs', { userId: 'user-two' }),
+    ]);
+    const routes = await routeHarness(kv);
+    const res = await routes.inbox({ ids: 'newest,landed,nope,newest' });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.tasks.map(t => t.id), ['newest', 'landed'], 'dedupes, drops unknown ids, keeps the order asked');
+    assert.equal(res.body.tasks[1].status, 'done', 'a task that already left the inbox comes back with its status');
+    assert.equal(res.body.inboxCount, 5, 'inboxCount is still the whole inbox');
+    assert.equal((await routes.inbox({ ids: 'theirs' })).body.tasks.length, 0, "another user's task is not returned");
+    assert.equal((await routes.inbox({ ids: '' })).body.tasks.length, 5, 'empty ids falls back to the oldest page');
+  });
+
   test('limit truncates the list but not inboxCount; defaults to 50 and caps at 200', async () => {
     const routes = await routeHarness(seededKV());
     const two = await routes.inbox({ limit: '2' });
