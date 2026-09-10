@@ -13,6 +13,8 @@ export async function middleware(request) {
     pathname.startsWith('/api/capture/') ||
     pathname.startsWith('/api/applaud-webhook') ||
     pathname.startsWith('/api/pebble-webhook') ||     // Pebble Index Hold & Talk; the route checks the bearer itself
+    pathname.startsWith('/api/tasks') ||              // every handler calls requireAuth (session or bearer); the phone's
+                                                      // Triage PATCH/DELETE must not depend on a web-login cookie
     pathname.startsWith('/api/github/issue-resolved') ||
     pathname.startsWith('/api/cron/')
   ) {
