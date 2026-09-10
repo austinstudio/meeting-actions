@@ -5,6 +5,9 @@ import { summarizeDelivery, redactValue, sniffMagic, summarizeMultipart, appendR
 test('headers keep content/user-agent/x-* and drop anything auth-like', () => {
   const h = pickHeaders({ 'content-type': 'application/json', 'user-agent': 'Pebble/1.0', 'x-pebble-event': 'memo', authorization: 'Bearer abc', cookie: 'a=b', 'x-signature': 'zz', host: 'x' });
   assert.deepEqual(h, { 'content-type': 'application/json', 'user-agent': 'Pebble/1.0', 'x-pebble-event': 'memo' });
+  const proxy = pickHeaders({ 'x-index-trigger': 'single-click-hold', 'x-audio-size': '40822', 'x-vercel-sc-headers': '{"Authorization":"Bearer eyJhbGciOi..."}',
+    'x-forwarded-for': '1.2.3.4', 'x-real-ip': '1.2.3.4', 'x-vercel-ip-city': 'Town', 'x-invocation-id': 'iad1::x', 'x-custom': 'Bearer abc' });
+  assert.deepEqual(proxy, { 'x-index-trigger': 'single-click-hold', 'x-audio-size': '40822' }, 'proxy internals and anything carrying a token are dropped');
 });
 
 test('json delivery: keys listed, base64 audio redacted with magic, transcription text kept', () => {
