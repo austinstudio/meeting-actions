@@ -18,6 +18,7 @@ import { requireAuth } from '../../lib/auth';
 import { withIngestAlert } from '../../lib/alerts';
 import { summarizeDelivery, appendRun, parseMultipart, MAX_BODY_BYTES } from '../../lib/pebble-webhook.mjs';
 import { buildMemo, storeMemo } from '../../lib/pebble-memos.mjs';
+import { notifyDevices } from '../../lib/apns.mjs';
 
 export const config = { api: { bodyParser: false } };
 
@@ -74,7 +75,10 @@ async function handler(req, res) {
   }
   const stored = await storeMemo(kv, userId, built.memo, built.audioBody);
   console.log(`Pebble webhook: memo ${built.memo.id} ${stored ? 'queued' : 'duplicate'} (${built.memo.audio?.bytes ?? 0} bytes audio, ${built.memo.transcription.length} chars)`);
-  return res.status(200).json({ ok: true, memo: { id: built.memo.id, queued: stored, duplicate: !stored } });
+  // Wake the phone so it pulls now. Awaited (Vercel may freeze the function after the response) but never fatal.
+  const push = stored ? await notifyDevices(kv, userId) : null;
+  if (push) console.log(`Pebble webhook: push sent=${push.sent} failed=${push.failed} forgotten=${push.forgotten}${push.skipped ? ` (${push.skipped})` : ''}`);
+  return res.status(200).json({ ok: true, memo: { id: built.memo.id, queued: stored, duplicate: !stored }, push });
 }
 
 export default withIngestAlert('pebble-webhook', handler);
