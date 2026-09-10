@@ -12,6 +12,7 @@ export async function middleware(request) {
     pathname.startsWith('/api/quick-capture') ||
     pathname.startsWith('/api/capture/') ||
     pathname.startsWith('/api/applaud-webhook') ||
+    pathname.startsWith('/api/pebble-webhook') ||     // Pebble Index Hold & Talk; the route checks the bearer itself
     pathname.startsWith('/api/github/issue-resolved') ||
     pathname.startsWith('/api/cron/')
   ) {
