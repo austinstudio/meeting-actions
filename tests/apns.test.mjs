@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { buildProviderJWT, backgroundPayload, shouldForgetDevice, isValidDeviceToken, registerDevice, removeDevice, notifyDevices, apnsConfig, devicesKey } from '../lib/apns.mjs';
+import { buildProviderJWT, backgroundPayload, memoAlertPayload, shouldForgetDevice, isValidDeviceToken, registerDevice, removeDevice, notifyDevices, apnsConfig, devicesKey } from '../lib/apns.mjs';
 
 class FakeKV { values = new Map(); async get(k) { return this.values.has(k) ? JSON.parse(this.values.get(k)) : null; } async set(k, v) { this.values.set(k, JSON.stringify(v)); } async del(k) { this.values.delete(k); } }
 const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -50,6 +50,27 @@ test('device registry dedupes by token, keeps environment, caps size', async () 
   assert.equal((await kv.get(devicesKey('u2'))).length, 10);
 });
 
+test('memo alert payload: visible, wakes the app, quotes the transcript, truncates long ones', () => {
+  const p = memoAlertPayload({ id: 'm1', transcription: 'Check with  Lauren about the deck.' });
+  assert.deepEqual(p.aps.alert, { title: 'Pebble memo', subtitle: 'Filing on your iPhone…', body: '“Check with Lauren about the deck.”' });
+  assert.equal(p.aps['content-available'], 1); assert.equal(p.aps.category, 'PEBBLE_MEMO'); assert.equal(p.aps['thread-id'], 'pebble');
+  assert.equal(p.memoId, 'm1'); assert.equal(p.reason, 'pebble-memo');
+  const long = memoAlertPayload({ id: 'm2', transcription: 'word '.repeat(60) });
+  assert.ok(long.aps.alert.body.length <= 112 && long.aps.alert.body.endsWith('…”'));
+  assert.equal(memoAlertPayload({ id: 'm3', transcription: '' }).aps.alert.body, 'Filing your memo…');
+});
+
+test('notifyDevices with a memo sends a priority-10 alert collapsed on the memo id', async () => {
+  const kv = new FakeKV();
+  await registerDevice(kv, 'u1', { token: TOKEN_A, environment: 'development' });
+  const calls = [];
+  const send = async (args) => { calls.push(args); return { status: 200 }; };
+  const summary = await notifyDevices(kv, 'u1', { config, send, memo: { id: 'memo-1', transcription: 'Buy milk.' } });
+  assert.deepEqual(summary, { sent: 1, failed: 0, forgotten: 0, skipped: null });
+  assert.equal(calls[0].pushType, 'alert'); assert.equal(calls[0].priority, '10'); assert.equal(calls[0].collapseId, 'memo-1');
+  assert.equal(calls[0].payload.aps.alert.body, '“Buy milk.”');
+});
+
 test('notifyDevices sends to each device on its environment host, forgets dead tokens, skips when unconfigured', async () => {
   const kv = new FakeKV();
   assert.deepEqual(await notifyDevices(kv, 'u1', { config: null }), { sent: 0, failed: 0, forgotten: 0, skipped: 'APNs not configured' });
@@ -57,14 +78,15 @@ test('notifyDevices sends to each device on its environment host, forgets dead t
   await registerDevice(kv, 'u1', { token: TOKEN_A, environment: 'development' });
   await registerDevice(kv, 'u1', { token: TOKEN_B, environment: 'production' });
   const calls = [];
-  const send = async ({ token, environment, bundleId, jwt, payload }) => {
-    calls.push({ token, environment, bundleId, hasJwt: jwt.split('.').length === 3, payload });
+  const send = async ({ token, environment, bundleId, jwt, payload, pushType, priority }) => {
+    calls.push({ token, environment, bundleId, hasJwt: jwt.split('.').length === 3, payload, pushType, priority });
     return token === TOKEN_B ? { status: 410, reason: 'Unregistered' } : { status: 200, reason: null };
   };
   const summary = await notifyDevices(kv, 'u1', { config, send, log: { warn() {} } });
   assert.deepEqual(summary, { sent: 1, failed: 1, forgotten: 1, skipped: null });
   assert.deepEqual(calls.map(c => [c.token, c.environment, c.bundleId, c.hasJwt]), [[TOKEN_A, 'development', 'design.usdc.quicknotes', true], [TOKEN_B, 'production', 'design.usdc.quicknotes', true]]);
   assert.deepEqual(calls[0].payload, { aps: { 'content-available': 1 }, reason: 'pebble-memo' });
+  assert.equal(calls[0].pushType, 'background'); assert.equal(calls[0].priority, '5');
   assert.deepEqual((await kv.get(devicesKey('u1'))).map(d => d.token), [TOKEN_A], 'the 410 token is gone');
   const flaky = await notifyDevices(kv, 'u1', { config, send: async () => { throw new Error('ECONNRESET'); }, log: { warn() {} } });
   assert.deepEqual(flaky, { sent: 0, failed: 1, forgotten: 0, skipped: null });
