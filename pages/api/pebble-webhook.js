@@ -1,11 +1,14 @@
 // pages/api/pebble-webhook.js
 // Receiver for the Pebble Index "Hold & Talk" webhook (Pebble app → Settings → Advanced → Webhook).
 //
-// Discovery phase (Sep 2026): records a shape summary of every delivery under KV `pebble:webhook:runs`
-// (last 10) — headers minus auth, content type, JSON keys with long/base64 values redacted, multipart part
-// list with sizes and audio magic bytes, full transcription text. Never stores audio. GET returns the runs.
-// Once the format is known this route becomes the real ingest (path 2: store audio, wake the phone) at the
-// same URL, so the Pebble app keeps its configuration.
+// Wire format (CoreApp 1.11, observed 2026-09-09): one multipart/form-data POST per memo with parts
+// `audio` (m4a, audio/mp4), `transcription` (Pebble's on-phone transcript), `recordedAt` (epoch ms),
+// `client` = ring; test events carry `test=true`. Headers x-index-trigger, x-audio-size.
+//
+// Path 2: the memo is stored (lib/pebble-memos.mjs) for the Quick Notes phone app to pull, parse on-device
+// and post as a structured capture; nothing is imported here. A shape summary of the last 10 deliveries is
+// kept under pebble:webhook:runs:<userId> for diagnostics (GET returns them, DELETE clears). Audio bytes
+// never appear in the summaries.
 //
 // Auth: `Authorization: Bearer <token>` header configured in the Pebble app (the same bearer the phone app
 // uses) or a session cookie; both resolve to the owner's userId via lib/auth.
@@ -13,7 +16,8 @@
 import { kv } from '@vercel/kv';
 import { requireAuth } from '../../lib/auth';
 import { withIngestAlert } from '../../lib/alerts';
-import { summarizeDelivery, appendRun, MAX_BODY_BYTES } from '../../lib/pebble-webhook.mjs';
+import { summarizeDelivery, appendRun, parseMultipart, MAX_BODY_BYTES } from '../../lib/pebble-webhook.mjs';
+import { buildMemo, storeMemo } from '../../lib/pebble-memos.mjs';
 
 export const config = { api: { bodyParser: false } };
 
@@ -57,13 +61,20 @@ async function handler(req, res) {
   const summary = summarizeDelivery({ method: req.method, url: req.url, headers: req.headers, body });
   const runs = appendRun((await kv.get(RUNS_KEY(userId))) || [], summary);
   await kv.set(RUNS_KEY(userId), runs);
-  console.log(`Pebble webhook: ${summary.kind} ${summary.bytes} bytes (${summary.contentType || 'no content-type'})`);
 
-  return res.status(200).json({
-    ok: true,
-    received: { kind: summary.kind, bytes: summary.bytes, contentType: summary.contentType, keys: summary.keys ?? summary.parts?.map(p => p.name) ?? null },
-    note: 'Discovery mode: shape recorded, nothing imported yet.',
-  });
+  const parts = summary.kind === 'multipart' ? parseMultipart(body, summary.contentType) : null;
+  if (!parts) {
+    console.log(`Pebble webhook: ignored ${summary.kind} ${summary.bytes} bytes (${summary.contentType || 'no content-type'})`);
+    return res.status(200).json({ ok: true, skipped: true, reason: `unsupported body: ${summary.kind}` });
+  }
+  const built = buildMemo({ parts, headers: req.headers, receivedAt: summary.receivedAt });
+  if (built.skip) {
+    console.log(`Pebble webhook: skipped (${built.skip})`);
+    return res.status(200).json({ ok: true, skipped: true, reason: built.skip });
+  }
+  const stored = await storeMemo(kv, userId, built.memo, built.audioBody);
+  console.log(`Pebble webhook: memo ${built.memo.id} ${stored ? 'queued' : 'duplicate'} (${built.memo.audio?.bytes ?? 0} bytes audio, ${built.memo.transcription.length} chars)`);
+  return res.status(200).json({ ok: true, memo: { id: built.memo.id, queued: stored, duplicate: !stored } });
 }
 
 export default withIngestAlert('pebble-webhook', handler);

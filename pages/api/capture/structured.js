@@ -53,7 +53,9 @@ async function handler(req, res) {
     tasks = clientParse.tasks || []; parsedBy = clientParse.engine || 'client';
   }
 
-  const sourceLabel = source === 'watch' ? 'Watch capture' : `Capture: ${source}`;
+  const sourceLabel = source === 'watch' ? 'Watch capture' : source === 'phone' ? 'iPhone capture' : source === 'pebble' ? 'Pebble capture' : `Capture: ${source}`;
+  // Tags: everything from the Quick Notes app is 'watch' (the owner filters on it), except Pebble Index memos.
+  const tags = source === 'pebble' ? ['pebble'] : ['watch'];
   // Captures with an ID share one meeting per local day ("Quick captures — Sep 7, 2026"); each capture's
   // transcript is appended to that day's transcript log. Legacy requests without an ID keep a meeting each.
   const meeting = capture
@@ -74,7 +76,7 @@ async function handler(req, res) {
       processedAt: new Date().toISOString(),
     };
   const meetingId = meeting.id;
-  const newTasks = captureTaskIDs(capture, buildTaskRecords(tasks, { userId, meetingId, sourceLabel, tags: ['watch'] }));
+  const newTasks = captureTaskIDs(capture, buildTaskRecords(tasks, { userId, meetingId, sourceLabel, tags }));
   const response = {
     success: true,
     parsedBy,
