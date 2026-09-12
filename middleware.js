@@ -16,6 +16,7 @@ export async function middleware(request) {
     pathname.startsWith('/api/pebble/') ||            // phone pull of Pebble memos (pending/audio/ack); requireAuth inside
     pathname.startsWith('/api/tasks') ||              // every handler calls requireAuth (session or bearer); the phone's
                                                       // Triage PATCH/DELETE must not depend on a web-login cookie
+    pathname.startsWith('/api/contacts') ||           // the phone's People screen (list / add / alias); requireAuth inside
     pathname.startsWith('/api/github/issue-resolved') ||
     pathname.startsWith('/api/cron/')
   ) {
