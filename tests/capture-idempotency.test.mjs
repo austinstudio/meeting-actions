@@ -28,6 +28,7 @@ function records(capture, { task = 'Send the report', transcript = TRANSCRIPT } 
 
 class MemoryKV {
   values = new Map();
+  ttls = new Map();   // key -> seconds, set by the commit script's EXPIRE
   reads = 0;
   writes = 0;
   failRead = false;
@@ -69,6 +70,7 @@ class MemoryKV {
     const previousTranscript = meetingExists && this.values.has(transcriptKey) ? JSON.parse(this.values.get(transcriptKey)).text : null;
     this.values.set(transcriptKey, previousTranscript === null ? args[3] : JSON.stringify({ text: `${previousTranscript}\n\n${JSON.parse(args[3]).text}` }));
     this.values.set(receiptKey, args[4]);
+    this.ttls.set(receiptKey, Number(args[7]));
     this.values.set(versionKey, String((this.values.has(versionKey) ? Number(JSON.parse(this.values.get(versionKey))) : 0) + 1));
     this.writes++;
     if (this.failAfterCommit) {
@@ -208,6 +210,16 @@ describe('capture HTTP routes', () => {
     assert.equal(kv.writes, 1);
     assert.equal((await kv.get('meetings')).length, 1);
     assert.equal((await kv.get('tasks')).length, 1);
+  });
+
+  test('receipts are stored with a 90-day expiry, never forever', async () => {
+    const kv = new MemoryKV(), routes = await routeHarness(kv);
+    const first = await routes.request('structured');
+    assert.equal(first.statusCode, 200);
+    const receiptKey = [...kv.ttls.keys()].find(k => k.startsWith('capture-receipt:v1:'));
+    assert.ok(receiptKey, 'commit script received a receipt key');
+    assert.equal(kv.ttls.get(receiptKey), idempotency.RECEIPT_TTL_SECONDS);
+    assert.equal(idempotency.RECEIPT_TTL_SECONDS, 90 * 24 * 60 * 60);
   });
 
   test('simultaneous cross-route retries commit once and return the winning parse', async () => {
@@ -489,7 +501,8 @@ describe('actual Redis atomic commit', { skip: process.env.CAPTURE_REDIS_TESTS !
     assert.equal((await kv.get('tasks')).length, 1);
     assert.deepEqual(await kv.get(`meeting:${capture.meetingID}:transcript`), { text: TRANSCRIPT });
     assert.deepEqual(await findCaptureResponse(kv, capture), results[0]);
-    assert.equal(await command('TTL', capture.key), -1);
+    const ttl = await command('TTL', capture.key);   // real EXPIRE from the Lua script: 90 days, minus test time
+    assert.ok(ttl > idempotency.RECEIPT_TTL_SECONDS - 60 && ttl <= idempotency.RECEIPT_TTL_SECONDS, `receipt TTL ${ttl}`);
   });
 
   test('compare-and-set task updates retry past a concurrent capture commit (real Lua)', async () => {
