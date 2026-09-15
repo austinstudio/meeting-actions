@@ -5,7 +5,13 @@
 // GET /api/capture/inbox?ids=a,b,c                 The named tasks (any status, up to 20, in the order
 //                                                  asked) instead of the oldest page — the phone opens
 //                                                  Triage on a task tapped in Captures, which is at the
-//                                                  newest end of the inbox. inboxCount/triage unchanged.
+//                                                  newest end of the inbox, and mirrors task status onto
+//                                                  the Captures pass. Archived and trashed tasks ARE
+//                                                  returned here, with `archived` / `deleted` flags, so a
+//                                                  task finished on the website and then "Archive
+//                                                  Completed" still reads as done, not as missing. Only
+//                                                  ids that do not exist are absent. inboxCount/triage
+//                                                  unchanged.
 // Response fields are a contract with the phone app; do not rename them.
 
 const MAX_IDS = 20;
@@ -37,8 +43,10 @@ export default async function handler(req, res) {
     const live = liveTasks(tasks, userId);
     const inbox = live.filter(t => t.status === 'uncategorized').sort(byCreatedAt);
     const ids = parseIds(req.query.ids);
+    // By id: any of the user's tasks, archived or trashed included (flags tell the client which).
+    const mine = ids.length > 0 ? tasks.filter(t => t && t.userId === userId) : [];
     const page = ids.length > 0
-      ? ids.map(id => live.find(t => t.id === id)).filter(Boolean)
+      ? ids.map(id => mine.find(t => t.id === id)).filter(Boolean)
       : inbox.slice(0, limit);
 
     res.setHeader('Cache-Control', 'private, no-store');

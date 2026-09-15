@@ -82,9 +82,12 @@ that package so the wire format cannot drift.
 
 ## Reading status back
 
-`GET /api/capture/inbox?ids=<id1>,<id2>,…` — up to 20 ids per call, any status, in the order asked; ids that
-are trashed or archived are simply absent. Poll only ids with a `server_task_id` and only on the engine tick
-(every 10 min), in batches of 20, same as the phone's `TaskStatusRefresher`.
+`GET /api/capture/inbox?ids=<id1>,<id2>,…` — up to 20 ids per call, any state, in the order asked. Since
+2026-09-15 archived and trashed tasks are returned too, each serialized with `archived` and `deleted` booleans;
+only ids that do not exist (or belong to another user) are absent. The website's "Archive Completed" sets
+`archived: true` on done tasks without changing `status`, so a finished task keeps reading as `done`. Poll only
+ids with a `server_task_id` and only on the engine tick (every 10 min), in batches of 20, same as the phone's
+`TaskStatusRefresher`. A per-id `GET /api/tasks/<id>` fallback is no longer needed.
 
 Mapping back into Glimpse:
 
@@ -93,8 +96,8 @@ Mapping back into Glimpse:
 | `uncategorized` | still in the Inbox; chip "Inbox" |
 | `todo`, `in-progress` | chip "To do" |
 | `waiting` | chip "Follow up" |
-| `done` | insight → done, `statusChangedBy: "remote"` |
-| absent from the response | trashed/archived on the board → insight → expired |
+| `done` (archived or not) | insight → done, `statusChangedBy: "remote"` |
+| `deleted: true`, or absent from the response | trashed / gone on the board → insight → expired |
 
 ## Writing status from Glimpse
 

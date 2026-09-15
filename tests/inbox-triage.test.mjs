@@ -102,7 +102,7 @@ async function routeHarness(kv) {
 }
 
 const NOW = new Date('2026-09-08T18:00:00Z');
-const TASK_FIELDS = ['id', 'task', 'status', 'archived', 'owner', 'dueDate', 'priority', 'type', 'person', 'meetingId', 'meetingTitle', 'createdAt', 'tags', 'context'];
+const TASK_FIELDS = ['id', 'task', 'status', 'archived', 'deleted', 'owner', 'dueDate', 'priority', 'type', 'person', 'meetingId', 'meetingTitle', 'createdAt', 'tags', 'context'];
 const clear = (timestamp, newValue = 'todo', extra = {}) =>
   ({ id: `act_${timestamp}`, type: 'update', field: 'status', oldValue: 'uncategorized', newValue, user: 'Test User', timestamp, ...extra });
 const task = (id, overrides = {}) => ({ id, userId: 'user-one', task: `Task ${id}`, status: 'uncategorized', activity: [], tags: ['watch'], ...overrides });
@@ -234,7 +234,8 @@ describe('GET /api/capture/inbox', () => {
     assert.equal(res.body.inboxCount, 5);
     assert.deepEqual(res.body.tasks.map(t => t.id), ['oldest', 'middle', 'newest', 'no-date', 'bad-date']);
     assert.deepEqual(res.body.tasks[2], {
-      id: 'newest', task: 'Task newest', status: 'uncategorized', archived: false, owner: 'Me', dueDate: '2026-09-10', priority: 'high',
+      id: 'newest', task: 'Task newest', status: 'uncategorized', archived: false,
+      deleted: false, owner: 'Me', dueDate: '2026-09-10', priority: 'high',
       type: 'follow-up', person: 'Sam', meetingId: 'm1', meetingTitle: 'Quick captures — Sep 7, 2026', createdAt: '2026-09-08T12:00:00Z', tags: ['watch'], context: null,
     });
     for (const t of res.body.tasks) {
@@ -248,6 +249,27 @@ describe('GET /api/capture/inbox', () => {
     assert.equal(res.body.tasks[4].meetingTitle, null, 'unknown meeting id');
     assert.equal(res.body.tasks[4].owner, null);
     assert.deepEqual(res.body.triage, { clearedByDay: {}, cleared30Days: 0 });
+  });
+
+  test('ids returns archived and trashed tasks with their flags, so a website "Archive Completed" reads as done', async () => {
+    const kv = new MemoryKV();
+    kv.seed('tasks', [
+      task('finished', { status: 'done', archived: true, archivedAt: '2026-09-15T12:00:20Z' }),
+      task('trashed', { status: 'todo', deleted: true, deletedAt: '2026-09-15T12:00:00Z' }),
+      task('open', { status: 'uncategorized' }),
+      task('theirs', { status: 'done', archived: true, userId: 'someone-else' }),
+    ]);
+    const routes = await routeHarness(kv);
+    const res = await routes.inbox({ ids: 'finished,trashed,open,theirs,missing' });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.tasks.map(t => [t.id, t.status, t.archived, t.deleted]), [
+      ['finished', 'done', true, false],
+      ['trashed', 'todo', false, true],
+      ['open', 'uncategorized', false, false],
+    ], "archived and trashed come back flagged; another user's task and an unknown id are absent");
+    const page = await routes.inbox({});
+    assert.deepEqual(page.body.tasks.map(t => t.id), ['open'], 'the default page still excludes archived and trashed tasks');
+    assert.equal(page.body.inboxCount, 1);
   });
 
   test('ids returns the named live tasks in the order asked, any status, without changing inboxCount', async () => {
