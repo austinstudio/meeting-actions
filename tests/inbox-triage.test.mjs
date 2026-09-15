@@ -442,6 +442,39 @@ describe('Triage actions through /api/tasks/[id] with a bearer token', () => {
     assert.equal((await routes.remove('a', undefined)).statusCode, 200, 'a missing body is tolerated');
   });
 
+  test('a retried soft DELETE is idempotent: one delete activity, same deletedAt, restore still works', async () => {
+    const kv = new MemoryKV().seed('meetings', []).seed('tasks', [task('a', { createdAt: '2026-09-08T10:00:00Z' })]);
+    const routes = await routeHarness(kv);
+    const first = await routes.remove('a', { permanent: false });
+    assert.equal(first.statusCode, 200);
+    assert.equal(first.body.alreadyDeleted, undefined);
+    const afterFirst = (await kv.get('tasks')).find(t => t.id === 'a');
+    assert.equal(afterFirst.deleted, true);
+    assert.equal(afterFirst.activity.filter(e => e.type === 'delete').length, 1);
+    const writesAfterFirst = kv.writes;
+
+    const second = await routes.remove('a', { permanent: false });
+    assert.equal(second.statusCode, 200);
+    assert.equal(second.body.success, true);
+    assert.equal(second.body.alreadyDeleted, true);
+    assert.equal(second.body.task.deletedAt, afterFirst.deletedAt);
+    const afterSecond = (await kv.get('tasks')).find(t => t.id === 'a');
+    assert.equal(afterSecond.activity.filter(e => e.type === 'delete').length, 1, 'retry must not add a second delete entry');
+    assert.equal(afterSecond.deletedAt, afterFirst.deletedAt);
+    assert.equal(kv.writes, writesAfterFirst, 'retry writes nothing');
+
+    const restored = await routes.raw('taskById', { method: 'PUT', query: { id: 'a' }, body: { restore: true } });
+    assert.equal(restored.statusCode, 200);
+    assert.equal(restored.body.task.deleted, false);
+    assert.equal((await routes.inbox()).body.inboxCount, 1);
+
+    // Permanent delete of a trashed task still removes it outright.
+    await routes.remove('a', { permanent: false });
+    assert.equal((await routes.remove('a', { permanent: true })).statusCode, 200);
+    assert.equal((await kv.get('tasks')).length, 0);
+    assert.equal((await routes.remove('a', { permanent: false })).statusCode, 404);
+  });
+
   test('another user cannot triage or delete the task', async () => {
     const kv = new MemoryKV().seed('tasks', [task('a')]);
     const routes = await routeHarness(kv);

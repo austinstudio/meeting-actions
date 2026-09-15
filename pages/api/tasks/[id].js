@@ -248,13 +248,21 @@ export default async function handler(req, res) {
     try {
       const { permanent } = req.body || {};
 
+      // A soft delete that is already in the trash is a retry (the phone re-sends stalled DELETEs).
+      // Returning null skips the write, so the task keeps its original deletedAt and single
+      // 'delete' activity entry — throughput counts each delete event as a clear.
+      let alreadyDeleted = null;
       const outcome = await updateTasks(kv, tasks => {
+        alreadyDeleted = null;
         const taskIndex = tasks.findIndex(t => t.id === id && t.userId === userId);
         if (taskIndex === -1) return null;
         const target = tasks[taskIndex];
 
         if (permanent) {
           tasks = tasks.filter(t => t.id !== id);
+        } else if (target.deleted) {
+          alreadyDeleted = target;
+          return null;
         } else {
           // Soft delete - move to trash
           target.deleted = true;
@@ -266,6 +274,7 @@ export default async function handler(req, res) {
         }
         return { tasks, task: target };
       });
+      if (!outcome && alreadyDeleted) return res.status(200).json({ success: true, task: alreadyDeleted, alreadyDeleted: true });
       if (!outcome) return res.status(404).json({ error: 'Task not found' });
 
       return res.status(200).json({ success: true, task: outcome.task });
