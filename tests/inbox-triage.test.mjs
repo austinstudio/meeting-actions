@@ -299,24 +299,28 @@ describe('GET /api/capture/board', () => {
     assert.equal((await routes.raw('board', { method: 'POST' })).statusCode, 405);
   });
 
-  test('returns every live task across statuses, due date first then createdAt, with columns and triage', async () => {
+  test('returns the live board tasks (inbox excluded), due date first then createdAt, with columns, counts and triage', async () => {
     const routes = await routeHarness(seededKV());
     const res = await routes.board({ tz: 'America/Chicago' });
     assert.equal(res.statusCode, 200);
     assert.equal(res.headers['Cache-Control'], 'private, no-store');
-    assert.deepEqual(Object.keys(res.body).sort(), ['columns', 'inboxCount', 'tasks', 'triage']);
-    // dated tasks ascending (todo-soon/todo-later/newest share or follow 'done'), then undated by createdAt with missing last
-    assert.deepEqual(res.body.tasks.map(t => t.id), ['done', 'todo-soon', 'todo-later', 'newest', 'oldest', 'middle', 'no-date', 'bad-date']);
-    assert.equal(res.body.inboxCount, 5);
+    assert.deepEqual(Object.keys(res.body).sort(), ['assigneeCounts', 'columnCounts', 'columns', 'inboxCount', 'tasks', 'totalBoardTasks', 'triage', 'truncated']);
+    // dated tasks ascending; the five uncategorized tasks belong to the inbox route and are not listed here
+    assert.deepEqual(res.body.tasks.map(t => t.id), ['done', 'todo-soon', 'todo-later']);
+    assert.equal(res.body.inboxCount, 5, 'inboxCount still counts the inbox');
     for (const t of res.body.tasks) {
       assert.deepEqual(Object.keys(t), TASK_FIELDS);
       assert.equal(t.archived, false);
     }
     assert.equal(res.body.tasks[0].status, 'done');
     assert.equal(res.body.tasks[1].status, 'todo');
-    assert.equal(res.body.tasks[4].status, 'uncategorized');
-    assert.equal(res.body.tasks[4].meetingTitle, 'Quick captures — Sep 7, 2026');
+    assert.ok(!res.body.tasks.some(t => t.status === 'uncategorized'));
     assert.ok(!res.body.tasks.some(t => ['trashed', 'archived', 'theirs'].includes(t.id)));
+    // counts cover every live task, so the inbox column is right even though its tasks are not listed
+    assert.deepEqual(res.body.columnCounts, { uncategorized: 5, done: 1, todo: 2 });
+    assert.deepEqual(res.body.assigneeCounts, []);
+    assert.equal(res.body.truncated, false);
+    assert.equal(res.body.totalBoardTasks, 3);
     assert.deepEqual(res.body.columns, [
       ...constants.DEFAULT_COLUMNS.map(c => ({ id: c.id, label: c.label })),
       { id: 'blocked', label: 'Blocked' },
@@ -324,21 +328,96 @@ describe('GET /api/capture/board', () => {
     assert.deepEqual(res.body.triage, { clearedByDay: {}, cleared30Days: 0 });
   });
 
-  test('same-day due dates fall back to createdAt order; limit defaults to 300 and caps at 1000', async () => {
+  test('same-day due dates fall back to createdAt order; limit defaults to 300 and caps at 1000; truncated says when it cut', async () => {
     const routes = await routeHarness(seededKV());
     const res = await routes.board();
-    // todo-later (due 09-10, created 09-02) precedes newest (due 09-10, created 09-08)
-    assert.deepEqual(res.body.tasks.slice(2, 4).map(t => t.id), ['todo-later', 'newest']);
-    assert.deepEqual((await routes.board({ limit: '1' })).body.tasks.map(t => t.id), ['done']);
-    assert.equal((await routes.board({ limit: '1' })).body.inboxCount, 5, 'inboxCount is not truncated');
+    // todo-soon (due 09-09) precedes todo-later (due 09-10); the same-day rule is covered by the inbox tests
+    assert.deepEqual(res.body.tasks.slice(1, 3).map(t => t.id), ['todo-soon', 'todo-later']);
+    const one = await routes.board({ limit: '1' });
+    assert.deepEqual(one.body.tasks.map(t => t.id), ['done']);
+    assert.equal(one.body.inboxCount, 5, 'inboxCount is not truncated');
+    assert.equal(one.body.truncated, true);
+    assert.equal(one.body.totalBoardTasks, 3, 'the total is counted before the slice');
+    assert.deepEqual(one.body.columnCounts, { uncategorized: 5, done: 1, todo: 2 }, 'counts are not truncated');
 
+    // 1200 live tasks, half inbox: the board lists only the 600 todo ones, oldest createdAt first
     const kv = new MemoryKV().seed('tasks', Array.from({ length: 1200 }, (_, i) => task(`t${i}`, { status: i % 2 ? 'todo' : 'uncategorized', createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() })));
     const big = await routeHarness(kv);
-    assert.equal((await big.board()).body.tasks.length, 300);
-    assert.equal((await big.board({ limit: '5000' })).body.tasks.length, 1000);
+    const page = (await big.board()).body;
+    assert.equal(page.tasks.length, 300);
+    assert.equal(page.truncated, true);
+    assert.equal(page.totalBoardTasks, 600);
+    assert.equal(page.inboxCount, 600);
+    assert.deepEqual(page.columnCounts, { uncategorized: 600, todo: 600 });
+    assert.equal(page.tasks[0].id, 't1', 't0 is an inbox task and stays out of the board list');
+    assert.equal((await big.board({ limit: '5000' })).body.tasks.length, 600, 'cap of 1000 is above the 600 board tasks');
+    assert.equal((await big.board({ limit: '5000' })).body.truncated, false);
     assert.equal((await big.board({ limit: 'abc' })).body.tasks.length, 300);
-    assert.equal((await big.board()).body.inboxCount, 600);
-    assert.equal((await big.board()).body.tasks[0].id, 't0');
+
+    // more than the cap: 1000 of 1100 open tasks, still flagged
+    const huge = await routeHarness(new MemoryKV().seed('tasks', Array.from({ length: 1100 }, (_, i) => task(`h${i}`, { status: 'todo' }))));
+    const capped = (await huge.board({ limit: '5000' })).body;
+    assert.equal(capped.tasks.length, 1000);
+    assert.equal(capped.truncated, true);
+    assert.equal(capped.totalBoardTasks, 1100);
+  });
+
+  test('done tasks finished more than 30 days ago drop off the board list but stay in the counts', async () => {
+    const recent = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const ancient = '2020-01-01T00:00:00.000Z';
+    const kv = new MemoryKV().seed('tasks', [
+      task('done-recent', { status: 'done', updatedAt: recent }),
+      task('done-ancient', { status: 'done', updatedAt: ancient }),
+      task('done-by-activity', { status: 'done', updatedAt: ancient, activity: [{ type: 'update', field: 'status', oldValue: 'todo', newValue: 'done', timestamp: recent }] }),
+      task('done-undated', { status: 'done' }),
+      task('done-created-long-ago', { status: 'done', createdAt: ancient }),
+      task('open', { status: 'todo' }),
+    ]);
+    const res = (await (await routeHarness(kv)).board()).body;
+    assert.deepEqual(res.tasks.map(t => t.id).sort(), ['done-by-activity', 'done-recent', 'done-undated', 'open']);
+    assert.deepEqual(res.columnCounts, { done: 5, todo: 1 }, 'the Done column still counts every done task');
+    assert.equal(res.totalBoardTasks, 4);
+
+    // the age rule itself, with a fixed clock
+    const now = Date.parse('2026-09-15T12:00:00Z');
+    const day = 86_400_000;
+    const live = [
+      { id: 'edge-in', status: 'done', updatedAt: new Date(now - 29 * day).toISOString() },
+      { id: 'edge-out', status: 'done', updatedAt: new Date(now - 31 * day).toISOString() },
+      { id: 'inbox', status: 'uncategorized' },
+      { id: 'todo', status: 'todo', updatedAt: new Date(now - 400 * day).toISOString() },
+    ];
+    assert.deepEqual(captureBoard.boardTasks(live, { now }).map(t => t.id), ['edge-in', 'todo']);
+    assert.equal(captureBoard.completedTime({ status: 'done' }), NaN);
+    assert.equal(captureBoard.completedTime({ status: 'done', updatedAt: 'garbage', createdAt: '2026-09-01T00:00:00Z' }), Date.parse('2026-09-01T00:00:00Z'));
+    assert.equal(captureBoard.completedTime({ status: 'done', updatedAt: '2026-09-10T00:00:00Z', activity: [
+      { field: 'status', newValue: 'done', timestamp: '2026-09-02T00:00:00Z' },
+      { field: 'status', newValue: 'done', timestamp: '2026-09-05T00:00:00Z' },
+      { field: 'status', newValue: 'todo', timestamp: '2026-09-09T00:00:00Z' },
+    ] }), Date.parse('2026-09-05T00:00:00Z'), 'latest status→done activity wins over updatedAt');
+  });
+
+  test('assigneeCounts rank people across owner and person on open board tasks only', async () => {
+    const kv = new MemoryKV().seed('tasks', [
+      task('1', { status: 'todo', owner: 'Ayan Pal', person: 'Marlin Metzger' }),
+      task('2', { status: 'todo', owner: 'Me', person: 'ayan pal' }),            // case-insensitive merge, first spelling kept
+      task('3', { status: 'in-progress', owner: 'Corey', person: 'Ayan Pal' }),
+      task('4', { status: 'waiting', owner: 'Ayan Pal', person: 'Ayan Pal' }),  // once per task
+      task('5', { status: 'done', owner: 'Priya Raman' }),                      // done ignored
+      task('6', { status: 'uncategorized', owner: 'Priya Raman' }),             // inbox ignored
+      task('7', { status: 'todo', owner: 'Unassigned', person: ' ' }),
+      task('8', { status: 'todo', owner: 'Priya Raman' }),
+      task('9', { status: 'todo', owner: 'Zed' }),
+      task('10', { status: 'todo', owner: 'Zed', userId: 'user-two' }),           // other user
+    ]);
+    const res = (await (await routeHarness(kv)).board()).body;
+    assert.deepEqual(res.assigneeCounts, [
+      { name: 'Ayan Pal', count: 4 }, { name: 'Corey', count: 1 }, { name: 'Marlin Metzger', count: 1 },
+      { name: 'Me', count: 1 }, { name: 'Priya Raman', count: 1 }, { name: 'Zed', count: 1 },
+    ]);
+    const many = Array.from({ length: 20 }, (_, i) => ({ status: 'todo', owner: `Person ${String(i).padStart(2, '0')}` }));
+    assert.equal(captureBoard.assigneeCounts(many).length, 12, 'top 12 only');
+    assert.equal(captureBoard.assigneeCounts(many, { limit: 3 }).length, 3);
   });
 
   test('empty storage yields an empty board with the default columns', async () => {
