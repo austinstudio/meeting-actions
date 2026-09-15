@@ -3,6 +3,7 @@
 
 import { kv } from '@vercel/kv';
 import { updateTasks } from '../../lib/task-store.mjs';
+import { updateMeetings } from '../../lib/meeting-store';
 import { requireAuth } from '../../lib/auth';
 
 export default async function handler(req, res) {

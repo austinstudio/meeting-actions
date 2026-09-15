@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseMultipart } from '../lib/pebble-webhook.mjs';
-import { buildMemo, memoIdFromFilename, storeMemo, listPending, ackMemo, serializeMemo, memoKey, audioKey, pendingKey, pendingSetKey, MAX_AUDIO_BYTES, MAX_PENDING } from '../lib/pebble-memos.mjs';
+import { buildMemo, memoIdFromFilename, storeMemo, listPending, ackMemo, serializeMemo, memoKey, audioKey, pendingKey, pendingSetKey, MAX_AUDIO_BYTES, MAX_PENDING, LIST_PAGE } from '../lib/pebble-memos.mjs';
 
 /** Strings + sorted sets, mirroring the @upstash/redis calls pebble-memos makes (zrange is index-based, oldest first). */
 class FakeKV {
@@ -18,7 +18,8 @@ class FakeKV {
   async zrange(k, start, stop) { this.#maybeFail('zrange'); const all = this.#sorted(k); return all.slice(start, stop === -1 ? undefined : stop + 1); }
   async zrem(k, ...members) { this.#maybeFail('zrem'); const z = this.#z(k); let n = 0; for (const m of members) if (z.delete(m)) n++; return n; }
   async zcard(k) { this.#maybeFail('zcard'); return this.zsets.get(k)?.size ?? 0; }
-  async zremrangebyrank(k, start, stop) { this.#maybeFail('zremrangebyrank'); const doomed = this.#sorted(k).slice(start, stop + 1); const z = this.#z(k); doomed.forEach(m => z.delete(m)); return doomed.length; }
+  /** Redis rank semantics: negative indexes count from the end (-1 = last), inclusive on both ends. */
+  async zremrangebyrank(k, start, stop) { this.#maybeFail('zremrangebyrank'); const all = this.#sorted(k); const from = start < 0 ? Math.max(0, all.length + start) : start; const to = stop < 0 ? all.length + stop + 1 : stop + 1; const doomed = to > from ? all.slice(from, to) : []; const z = this.#z(k); doomed.forEach(m => z.delete(m)); return doomed.length; }
   pendingIds(userId) { return this.#sorted(pendingSetKey(userId)); }
 }
 
@@ -77,8 +78,8 @@ test('buildMemo: real memo → record + audio; test event and empty deliveries a
 test('store → pending → ack lifecycle, idempotent and per user', async () => {
   const kv = new FakeKV();
   const { memo, audioBody } = buildMemo({ parts: parseMultipart(memoBody(), CT), receivedAt: '2026-09-10T01:37:57.196Z' });
-  assert.equal(await storeMemo(kv, 'u1', memo, audioBody), true);
-  assert.equal(await storeMemo(kv, 'u1', memo, audioBody), false, 'same memo again is a duplicate');
+  assert.equal(await storeMemo(kv, 'u1', memo, audioBody), 'stored');
+  assert.equal(await storeMemo(kv, 'u1', memo, audioBody), 'repaired', 'same memo again while pending is re-queued, not a new store');
   assert.equal(kv.ttl.get(audioKey('u1', memo.id)), 14 * 86400);
   assert.equal(kv.ttl.get(memoKey('u1', memo.id)), 14 * 86400);
   assert.deepEqual(kv.pendingIds('u1'), [memo.id]);
@@ -119,7 +120,7 @@ test('two memos arriving together both end up pending, oldest first', async () =
   const a = pendingMemo('aaaaaaaa-1', '2026-09-15T10:00:01.000Z');
   const b = pendingMemo('bbbbbbbb-2', '2026-09-15T10:00:00.000Z');
   const results = await Promise.all([storeMemo(kv, 'u1', a, null), storeMemo(kv, 'u1', b, null)]);
-  assert.deepEqual(results, [true, true]);
+  assert.deepEqual(results, ['stored', 'stored']);
   assert.deepEqual(kv.pendingIds('u1'), ['bbbbbbbb-2', 'aaaaaaaa-1'], 'ordered by receivedAt, not arrival');
   assert.deepEqual((await listPending(kv, 'u1')).map(m => m.id), ['bbbbbbbb-2', 'aaaaaaaa-1']);
 });
@@ -129,10 +130,10 @@ test('a stored memo missing from the queue is repaired by the duplicate path', a
   const memo = pendingMemo('cccccccc-3', '2026-09-15T10:00:00.000Z');
   await kv.set(memoKey('u1', memo.id), memo);                    // record exists, queue membership lost
   assert.deepEqual(await listPending(kv, 'u1'), [], 'invisible before the retry');
-  assert.equal(await storeMemo(kv, 'u1', memo, null), false, 'still reported as a duplicate');
+  assert.equal(await storeMemo(kv, 'u1', memo, null), 'repaired', 'reported as repaired so the webhook still wakes the phone');
   assert.deepEqual((await listPending(kv, 'u1')).map(m => m.id), [memo.id], 'but now discoverable');
   await ackMemo(kv, 'u1', memo.id);
-  assert.equal(await storeMemo(kv, 'u1', memo, null), false);
+  assert.equal(await storeMemo(kv, 'u1', memo, null), 'duplicate', 'a done memo is a plain duplicate');
   assert.deepEqual(await listPending(kv, 'u1'), [], 'a done duplicate is not re-queued');
 });
 
@@ -143,7 +144,7 @@ test('a failure after the record write is repaired when the Pebble app retries',
   await assert.rejects(storeMemo(kv, 'u1', memo, Buffer.from('audio')), /injected zadd failure/);
   assert.ok(await kv.get(memoKey('u1', memo.id)), 'record was written before the queue step failed');
   assert.deepEqual(await listPending(kv, 'u1'), []);
-  assert.equal(await storeMemo(kv, 'u1', memo, Buffer.from('audio')), false);
+  assert.equal(await storeMemo(kv, 'u1', memo, Buffer.from('audio')), 'repaired');
   assert.deepEqual((await listPending(kv, 'u1')).map(m => m.id), [memo.id]);
   assert.ok(await kv.get(audioKey('u1', memo.id)), 'audio from the first attempt is still there');
 });
@@ -174,13 +175,38 @@ test('the legacy pending array is migrated into the sorted set once, then delete
   assert.equal(kv.log.slice(before).filter(c => c === 'zadd').length, 0, 'second read does no migration work');
 });
 
-test('the queue never grows past MAX_PENDING; the oldest ids are dropped', async () => {
+test('the queue never grows past MAX_PENDING; the oldest ids are dropped, even when arrivals race at capacity', async () => {
   const kv = new FakeKV();
-  for (let i = 0; i < MAX_PENDING + 3; i++) {
-    await storeMemo(kv, 'u1', pendingMemo(`overflow-${String(i).padStart(4, '0')}`, new Date(Date.UTC(2026, 8, 1, 0, 0, i)).toISOString()), null);
+  const id = (i) => `overflow-${String(i).padStart(5, '0')}`;
+  const at = (i) => new Date(Date.UTC(2026, 8, 1, 0, 0, 0) + i * 1000).toISOString();
+  // Fill to exactly MAX_PENDING directly (the trim is exercised by the racing pair below).
+  for (let i = 0; i < MAX_PENDING; i++) {
+    await kv.set(memoKey('u1', id(i)), pendingMemo(id(i), at(i)));
+    await kv.zadd(pendingSetKey('u1'), { score: Date.parse(at(i)), member: id(i) });
   }
+  assert.equal(kv.pendingIds('u1').length, MAX_PENDING);
+  // Two memos arrive together at capacity: each adds then trims. A ZCARD-then-trim would have dropped four.
+  const results = await Promise.all([
+    storeMemo(kv, 'u1', pendingMemo(id(MAX_PENDING), at(MAX_PENDING)), null),
+    storeMemo(kv, 'u1', pendingMemo(id(MAX_PENDING + 1), at(MAX_PENDING + 1)), null),
+  ]);
+  assert.deepEqual(results, ['stored', 'stored']);
   const ids = kv.pendingIds('u1');
-  assert.equal(ids.length, MAX_PENDING);
-  assert.equal(ids[0], 'overflow-0003');
-  assert.equal(ids.at(-1), `overflow-${String(MAX_PENDING + 2).padStart(4, '0')}`);
+  assert.equal(ids.length, MAX_PENDING, 'exactly MAX_PENDING remain');
+  assert.ok(ids.includes(id(MAX_PENDING)) && ids.includes(id(MAX_PENDING + 1)), 'both new ids are members');
+  assert.equal(ids[0], id(2), 'only the two oldest were dropped');
+  assert.equal(kv.log.filter(c => c === 'zcard').length, 0, 'no read-then-trim');
+});
+
+test('listPending returns one page of LIST_PAGE, oldest first, without touching the rest of the queue', async () => {
+  const kv = new FakeKV();
+  for (let i = 0; i < LIST_PAGE + 5; i++) {
+    const mid = `page-${String(i).padStart(4, '0')}`;
+    await kv.set(memoKey('u1', mid), pendingMemo(mid, new Date(Date.UTC(2026, 8, 2, 0, 0, i)).toISOString()));
+    await kv.zadd(pendingSetKey('u1'), { score: Date.UTC(2026, 8, 2, 0, 0, i), member: mid });
+  }
+  const page = await listPending(kv, 'u1');
+  assert.equal(page.length, LIST_PAGE);
+  assert.equal(page[0].id, 'page-0000');
+  assert.equal(kv.pendingIds('u1').length, LIST_PAGE + 5, 'nothing pruned: every record is live');
 });

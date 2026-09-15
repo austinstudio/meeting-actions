@@ -60,3 +60,98 @@ test('runs ring keeps the newest ten', () => {
   for (let i = 0; i < 12; i++) runs = appendRun(runs, { i });
   assert.equal(runs.length, 10); assert.equal(runs[0].i, 11); assert.equal(runs[9].i, 2);
 });
+
+// ---------------------------------------------------------------------------
+// The real route (pages/api/pebble-webhook.js) with explicit dependencies: in-memory KV, a recording
+// notifyDevices, and the real lib/pebble-memos.mjs / lib/pebble-webhook.mjs. Checks the wake-push decision.
+import { readFile } from 'node:fs/promises';
+import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
+import * as pebbleWebhookLib from '../lib/pebble-webhook.mjs';
+import * as pebbleMemos from '../lib/pebble-memos.mjs';
+
+const WB = 'dac79c1d-7a4a-4861-9373-d663d631fc26';
+const CTW = `multipart/form-data; boundary=${WB}`;
+/** One Pebble delivery: m4a audio part (id from its filename), transcription, recordedAt, client. */
+function pebbleDelivery() {
+  const m4a = Buffer.concat([Buffer.from('\x00\x00\x00\x18ftypM4A '), Buffer.alloc(3000, 7)]);
+  return Buffer.concat([
+    Buffer.from(`--${WB}\r\nContent-Disposition: form-data; name="audio"; filename="ring_5F2FD2B5-ACDE-92B0-42DB-A32F0F8ACCD0-33-9978fd1f-d90c-4c2c-b492-7b9469b13477.m4a"\r\nContent-Type: audio/mp4\r\n\r\n`), m4a, Buffer.from('\r\n'),
+    Buffer.from(`--${WB}\r\nContent-Disposition: form-data; name="transcription"\r\n\r\nCheck with Lauren about the deck.\r\n`),
+    Buffer.from(`--${WB}\r\nContent-Disposition: form-data; name="recordedAt"\r\n\r\n1789004265865\r\n`),
+    Buffer.from(`--${WB}\r\nContent-Disposition: form-data; name="client"\r\n\r\nring\r\n`),
+    Buffer.from(`--${WB}--\r\n`),
+  ]);
+}
+
+class RouteKV {
+  values = new Map(); zsets = new Map();
+  async get(k) { return this.values.has(k) ? JSON.parse(this.values.get(k)) : null; }
+  async set(k, v) { this.values.set(k, JSON.stringify(v)); }
+  async del(k) { this.values.delete(k); this.zsets.delete(k); }
+  #z(k) { if (!this.zsets.has(k)) this.zsets.set(k, new Map()); return this.zsets.get(k); }
+  #sorted(k) { return [...(this.zsets.get(k) || new Map())].sort((a, b) => a[1] - b[1]).map(([m]) => m); }
+  async zadd(k, ...pairs) { const z = this.#z(k); for (const { score, member } of pairs) z.set(member, score); return pairs.length; }
+  async zrange(k, start, stop) { return this.#sorted(k).slice(start, stop === -1 ? undefined : stop + 1); }
+  async zrem(k, ...members) { const z = this.#z(k); let n = 0; for (const m of members) if (z.delete(m)) n++; return n; }
+  async zremrangebyrank(k, start, stop) { const all = this.#sorted(k); const to = stop < 0 ? all.length + stop + 1 : stop + 1; const doomed = to > start ? all.slice(start, to) : []; const z = this.#z(k); doomed.forEach(m => z.delete(m)); return doomed.length; }
+}
+
+async function webhookHarness() {
+  const kv = new RouteKV();
+  const pushes = [];
+  const dependencies = {
+    '@vercel/kv': { kv },
+    auth: { requireAuth: async (req, res) => { if (req.headers?.authorization !== 'Bearer test-one') { res.status(401).json({ error: 'Authentication required' }); return null; } return 'user-one'; } },
+    alerts: { withIngestAlert: (_source, handler) => handler },
+    'pebble-webhook.mjs': pebbleWebhookLib,
+    'pebble-memos.mjs': pebbleMemos,
+    'apns.mjs': { notifyDevices: async (_kv, userId, { memo }) => { pushes.push({ userId, memoId: memo.id }); return { sent: 1, failed: 0, forgotten: 0 }; } },
+  };
+  const context = createContext({ process: { env: {} }, console: { log() {}, error() {} }, Buffer });
+  const source = await readFile(new URL('../pages/api/pebble-webhook.js', import.meta.url), 'utf8');
+  const module = new SourceTextModule(source, { context });
+  await module.link(specifier => {
+    const name = specifier === '@vercel/kv' ? specifier : specifier.split('/').at(-1);
+    const exports = dependencies[name];
+    assert.ok(exports, `Unexpected route dependency: ${specifier}`);
+    return new SyntheticModule(Object.keys(exports), function () { for (const [key, value] of Object.entries(exports)) this.setExport(key, value); }, { context });
+  });
+  await module.evaluate();
+  const handler = module.namespace.default;
+  const post = async (body) => {
+    const listeners = {};
+    const req = { method: 'POST', url: '/api/pebble-webhook', headers: { authorization: 'Bearer test-one', 'content-type': CTW, 'x-index-trigger': 'single-click-hold' },
+      on(event, cb) { listeners[event] = cb; return this; } };
+    const res = { statusCode: 200, body: undefined, setHeader() {}, status(c) { this.statusCode = c; return this; }, json(b) { this.body = JSON.parse(JSON.stringify(b)); return this; }, end() { return this; } };
+    const done = handler(req, res);
+    await new Promise(r => setImmediate(r));   // readBody has registered its listeners
+    listeners.data(body); listeners.end();
+    await done;
+    return res;
+  };
+  return { kv, pushes, post };
+}
+
+test('webhook route: a new memo and a repaired retry both wake the phone; a done duplicate does not', async () => {
+  const { kv, pushes, post } = await webhookHarness();
+  const first = await post(pebbleDelivery());
+  assert.equal(first.statusCode, 200);
+  assert.deepEqual(first.body.memo, { id: '9978fd1f-d90c-4c2c-b492-7b9469b13477', queued: true, duplicate: false, repaired: false });
+  assert.equal(pushes.length, 1, 'new memo → one push');
+
+  // Same memo again while still pending on the server (the state a crash between record and queue leaves,
+  // or a plain Pebble retry): membership is repaired and the phone is woken again.
+  const retry = await post(pebbleDelivery());
+  assert.deepEqual(retry.body.memo, { id: '9978fd1f-d90c-4c2c-b492-7b9469b13477', queued: true, duplicate: false, repaired: true });
+  assert.equal(pushes.length, 2, 'repaired retry → another push');
+  assert.equal(retry.body.push.sent, 1);
+  assert.deepEqual((await pebbleMemos.listPending(kv, 'user-one')).map(m => m.id), ['9978fd1f-d90c-4c2c-b492-7b9469b13477']);
+
+  // Once the phone has acked it, a late retry is a plain duplicate: no push, not re-queued.
+  await pebbleMemos.ackMemo(kv, 'user-one', '9978fd1f-d90c-4c2c-b492-7b9469b13477');
+  const late = await post(pebbleDelivery());
+  assert.deepEqual(late.body.memo, { id: '9978fd1f-d90c-4c2c-b492-7b9469b13477', queued: false, duplicate: true, repaired: false });
+  assert.equal(late.body.push, null);
+  assert.equal(pushes.length, 2, 'done duplicate → no push');
+  assert.deepEqual(await pebbleMemos.listPending(kv, 'user-one'), []);
+});

@@ -73,12 +73,13 @@ async function handler(req, res) {
     console.log(`Pebble webhook: skipped (${built.skip})`);
     return res.status(200).json({ ok: true, skipped: true, reason: built.skip });
   }
-  const stored = await storeMemo(kv, userId, built.memo, built.audioBody);
-  console.log(`Pebble webhook: memo ${built.memo.id} ${stored ? 'queued' : 'duplicate'} (${built.memo.audio?.bytes ?? 0} bytes audio, ${built.memo.transcription.length} chars)`);
-  // Wake the phone so it pulls now. Awaited (Vercel may freeze the function after the response) but never fatal.
-  const push = stored ? await notifyDevices(kv, userId, { memo: built.memo }) : null;
+  const stored = await storeMemo(kv, userId, built.memo, built.audioBody);   // 'stored' | 'repaired' | 'duplicate'
+  console.log(`Pebble webhook: memo ${built.memo.id} ${stored} (${built.memo.audio?.bytes ?? 0} bytes audio, ${built.memo.transcription.length} chars)`);
+  // Wake the phone so it pulls now — also for a repaired retry, whose first attempt never reached this line.
+  // Awaited (Vercel may freeze the function after the response) but never fatal.
+  const push = stored !== 'duplicate' ? await notifyDevices(kv, userId, { memo: built.memo }) : null;
   if (push) console.log(`Pebble webhook: push sent=${push.sent} failed=${push.failed} forgotten=${push.forgotten}${push.skipped ? ` (${push.skipped})` : ''}`);
-  return res.status(200).json({ ok: true, memo: { id: built.memo.id, queued: stored, duplicate: !stored }, push });
+  return res.status(200).json({ ok: true, memo: { id: built.memo.id, queued: stored !== 'duplicate', duplicate: stored === 'duplicate', repaired: stored === 'repaired' }, push });
 }
 
 export default withIngestAlert('pebble-webhook', handler);
