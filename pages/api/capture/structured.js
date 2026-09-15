@@ -12,6 +12,7 @@ import { addMeetingWithTasks } from '../../../lib/meeting-store';
 import { getKnownPeople, extractWithGemini, buildTaskRecords, localDateOrToday } from '../../../lib/extract';
 import { notifyIngestFailure, withIngestAlert } from '../../../lib/alerts';
 import { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, sendCaptureError, dailyMeeting, captureEntryText } from '../../../lib/capture-idempotency.mjs';
+import { captureSourceID, captureSourceMeta } from '../../../lib/capture-sources.mjs';
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -26,7 +27,7 @@ async function handler(req, res) {
   const previous = await findCaptureResponse(kv, capture);
   if (previous) return res.status(200).json(previous);
 
-  const source = typeof body.source === 'string' && body.source ? body.source.slice(0, 40) : 'watch';
+  const source = captureSourceID(body.source);
   const recordedAt = Number.isFinite(body.recordedAt) ? new Date(body.recordedAt) : new Date();
   // The phone sends its local calendar date; a UTC split of recordedAt is wrong in the evening (US zones).
   const meetingDate = localDateOrToday(body.localDate) === body.localDate ? body.localDate : recordedAt.toISOString().split('T')[0];
@@ -53,9 +54,8 @@ async function handler(req, res) {
     tasks = clientParse.tasks || []; parsedBy = clientParse.engine || 'client';
   }
 
-  const sourceLabel = source === 'watch' ? 'Watch capture' : source === 'phone' ? 'iPhone capture' : source === 'pebble' ? 'Pebble capture' : `Capture: ${source}`;
-  // Tags: everything from the Quick Notes app is 'watch' (the owner filters on it), except Pebble Index memos.
-  const tags = source === 'pebble' ? ['pebble'] : ['watch'];
+  // Tags and labels by source (lib/capture-sources.mjs): 'watch' for the app, 'pebble', 'glimpse'.
+  const { label: sourceLabel, tags } = captureSourceMeta(source);
   // Captures with an ID share one meeting per local day ("Quick captures — Sep 7, 2026"); each capture's
   // transcript is appended to that day's transcript log. Legacy requests without an ID keep a meeting each.
   const meeting = capture

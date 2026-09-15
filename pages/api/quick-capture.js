@@ -8,6 +8,7 @@ import { addMeetingWithTasks } from '../../lib/meeting-store';
 import { getKnownPeople, extractWithGemini, buildTaskRecords, localDateOrToday } from '../../lib/extract';
 import { notifyIngestFailure } from '../../lib/alerts';
 import { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, sendCaptureError, dailyMeeting, captureEntryText } from '../../lib/capture-idempotency.mjs';
+import { captureSourceMeta } from '../../lib/capture-sources.mjs';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -82,7 +83,7 @@ export default async function handler(req, res) {
       };
     const meetingId = meeting.id;
 
-    const newTasks = captureTaskIDs(capture, buildTaskRecords(extracted.tasks, { userId, meetingId, sourceLabel, tags: ['watch'] }));
+    const newTasks = captureTaskIDs(capture, buildTaskRecords(extracted.tasks, { userId, meetingId, sourceLabel, tags: captureSourceMeta(source).tags }));
     const response = {
       success: true,
       meeting,

@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
 import { VercelKV } from '@vercel/kv';
 import * as idempotency from '../lib/capture-idempotency.mjs';
+import * as captureSources from '../lib/capture-sources.mjs';
 import * as taskStore from '../lib/task-store.mjs';
 
 const { updateTasks, TaskStoreError, TASKS_CAS_SCRIPT, TASKS_VERSION_KEY } = taskStore;
@@ -128,6 +129,7 @@ async function routeHarness(kv) {
       withIngestAlert: (_, handler) => handler,
     },
     'capture-idempotency.mjs': idempotency,
+    'capture-sources.mjs': captureSources,
   };
   async function load(relativePath) {
     const context = createContext({ process: { env: { CAPTURE_SECRET: 'test-secret', INBOUND_EMAIL_USER_ID: 'user-one' } },
