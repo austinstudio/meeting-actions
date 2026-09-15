@@ -4,7 +4,7 @@
 import { kv } from '@vercel/kv';
 import { updateTasks } from '../../../lib/task-store.mjs';
 import { requireAuth } from '../../../lib/auth';
-import { deleteTranscript } from '../../../lib/meeting-store';
+import { deleteTranscript, updateMeetings } from '../../../lib/meeting-store';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,32 +25,25 @@ export default async function handler(req, res) {
     try {
       const { title, date, participants } = req.body;
 
-      let meetings = await kv.get('meetings') || [];
-
-      // Find the meeting (must belong to user)
-      const meetingIndex = meetings.findIndex(m => m.id === id && m.userId === userId);
-      if (meetingIndex === -1) {
-        return res.status(404).json({ error: 'Meeting not found' });
-      }
-
-      // Update fields if provided
-      if (title !== undefined) {
-        meetings[meetingIndex].title = title;
-      }
-      if (date !== undefined) {
-        meetings[meetingIndex].date = date;
-      }
-      if (participants !== undefined) {
-        meetings[meetingIndex].participants = Array.isArray(participants) ? participants : [];
-      }
-
-      meetings[meetingIndex].updatedAt = new Date().toISOString();
-
-      await kv.set('meetings', meetings);
+      // Edit under compare-and-set (lib/meeting-store.js): a capture committing its daily meeting
+      // between our read and write makes this retry on fresh data instead of erasing that meeting.
+      const outcome = await updateMeetings(kv, meetings => {
+        const meetingIndex = meetings.findIndex(m => m.id === id && m.userId === userId);
+        if (meetingIndex === -1) return null;
+        const meeting = { ...meetings[meetingIndex] };
+        if (title !== undefined) meeting.title = title;
+        if (date !== undefined) meeting.date = date;
+        if (participants !== undefined) meeting.participants = Array.isArray(participants) ? participants : [];
+        meeting.updatedAt = new Date().toISOString();
+        const next = meetings.slice();
+        next[meetingIndex] = meeting;
+        return { meetings: next, meeting };
+      });
+      if (!outcome) return res.status(404).json({ error: 'Meeting not found' });
 
       return res.status(200).json({
         success: true,
-        meeting: meetings[meetingIndex]
+        meeting: outcome.meeting
       });
     } catch (error) {
       console.error('Meeting update error:', error);
@@ -63,21 +56,14 @@ export default async function handler(req, res) {
     if (!userId) return;
 
     try {
-      // Get current data from KV
-      let meetings = await kv.get('meetings') || [];
-
-      // Check if meeting exists and belongs to user
-      const meetingIndex = meetings.findIndex(m => m.id === id && m.userId === userId);
-      if (meetingIndex === -1) {
-        return res.status(404).json({ error: 'Meeting not found' });
-      }
-
-      // Remove the meeting
-      const deletedMeeting = meetings[meetingIndex];
-      meetings = meetings.filter(m => m.id !== id);
-
-      // Save back to KV
-      await kv.set('meetings', meetings);
+      // Remove the meeting under compare-and-set (lib/meeting-store.js)
+      const outcome = await updateMeetings(kv, meetings => {
+        const deletedMeeting = meetings.find(m => m.id === id && m.userId === userId);
+        if (!deletedMeeting) return null;
+        return { meetings: meetings.filter(m => m.id !== id), deletedMeeting };
+      });
+      if (!outcome) return res.status(404).json({ error: 'Meeting not found' });
+      const { deletedMeeting } = outcome;
       // Remove the meeting's tasks under compare-and-set (lib/task-store.mjs)
       const { deletedTaskCount } = await updateTasks(kv, tasks => ({
         tasks: tasks.filter(t => !(t.meetingId === id && t.userId === userId)),

@@ -13,7 +13,8 @@ import * as taskStore from '../lib/task-store.mjs';
 
 const { updateTasks, TaskStoreError, TASKS_CAS_SCRIPT, TASKS_VERSION_KEY } = taskStore;
 
-const { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, CaptureIdempotencyError, dailyMeetingTitle, captureEntryText } = idempotency;
+const { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, CaptureIdempotencyError, dailyMeetingTitle, captureEntryText,
+  updateMeetings, MeetingStoreError, MEETINGS_CAS_SCRIPT, MEETINGS_VERSION_KEY } = idempotency;
 const CAPTURE_ID = '4dc8d1b7-2f24-424e-abcf-3a2777a919a0';
 const OTHER_ID = '271c391b-346b-45e0-95df-aa3c4c625671';
 const TRANSCRIPT = 'Send the report tomorrow.';
@@ -42,8 +43,9 @@ class MemoryKV {
   onBeforeEval = null;   // test hook: runs before a script executes, to interleave another writer
   async eval(script, keys, args) {
     if (this.onBeforeEval) { const hook = this.onBeforeEval; this.onBeforeEval = null; await hook(script); }
-    if (script === TASKS_CAS_SCRIPT) {
-      // Models lib/task-store.mjs's compare-and-set; the Docker suite runs the actual Lua.
+    if (script === TASKS_CAS_SCRIPT || script === MEETINGS_CAS_SCRIPT) {
+      // Models the shared compare-and-set (tasks and meetings use the same script with their own keys);
+      // the Docker suite runs the actual Lua.
       const [tasksKey, versionKey] = keys, [json, expected] = args;
       const current = this.values.has(versionKey) ? String(JSON.parse(this.values.get(versionKey))) : '0';
       if (current !== expected) return 0;
@@ -54,8 +56,9 @@ class MemoryKV {
     }
     assert.equal(script, idempotency.CAPTURE_COMMIT_SCRIPT);
     if (this.failBeforeCommit) throw new Error('Synthetic pre-commit failure');
-    const [receiptKey, meetingsKey, tasksKey, transcriptKey, versionKey] = keys;
+    const [receiptKey, meetingsKey, tasksKey, transcriptKey, versionKey, meetingsVersionKey] = keys;
     assert.equal(versionKey, TASKS_VERSION_KEY);
+    assert.equal(meetingsVersionKey, MEETINGS_VERSION_KEY);
     const previous = this.values.has(receiptKey) ? JSON.parse(this.values.get(receiptKey)) : null;
     if (previous) return previous.fingerprint === args[0] ? ['replay', previous.response] : ['conflict'];
     const meetings = JSON.parse(this.values.get(meetingsKey) || '[]');
@@ -67,11 +70,14 @@ class MemoryKV {
     const meetingExists = meetings.some(m => m.id === meta.id);
     if (!meetingExists) this.values.set(meetingsKey, JSON.stringify([meta, ...meetings]));
     this.values.set(tasksKey, JSON.stringify([...JSON.parse(args[2]), ...tasks]));
-    const previousTranscript = meetingExists && this.values.has(transcriptKey) ? JSON.parse(this.values.get(transcriptKey)).text : null;
+    // The append decision follows the transcript key, not the meeting row (a stale edit can drop the row).
+    const previousTranscript = this.values.has(transcriptKey) ? JSON.parse(this.values.get(transcriptKey)).text : null;
     this.values.set(transcriptKey, previousTranscript === null ? args[3] : JSON.stringify({ text: `${previousTranscript}\n\n${JSON.parse(args[3]).text}` }));
     this.values.set(receiptKey, args[4]);
     this.ttls.set(receiptKey, Number(args[7]));
-    this.values.set(versionKey, String((this.values.has(versionKey) ? Number(JSON.parse(this.values.get(versionKey))) : 0) + 1));
+    for (const key of [versionKey, meetingsVersionKey]) {
+      this.values.set(key, String((this.values.has(key) ? Number(JSON.parse(this.values.get(key))) : 0) + 1));
+    }
     this.writes++;
     if (this.failAfterCommit) {
       this.failAfterCommit = false;
@@ -94,7 +100,7 @@ function response() {
 // Load the real route code with explicit dependencies. No env files, credentials,
 // Gemini requests, hosted KV calls or alert notifications can reach these tests.
 async function routeHarness(kv) {
-  const calls = { parse: 0, legacySave: 0, alerts: 0 };
+  const calls = { parse: 0, legacySave: 0, alerts: 0, transcriptsDeleted: [] };
   const dependencies = {
     '@vercel/kv': { kv },
     auth: { requireAuth: async (req, res) => {
@@ -104,7 +110,7 @@ async function routeHarness(kv) {
       return user || null;
     }, getUserName: async () => 'Test User' },
     'task-store.mjs': taskStore,
-    'meeting-store': { addMeetingWithTasks: async () => { calls.legacySave++; } },
+    'meeting-store': { addMeetingWithTasks: async () => { calls.legacySave++; }, updateMeetings, deleteTranscript: async id => { calls.transcriptsDeleted.push(id); } },
     extract: {
       getKnownPeople: async () => [],
       localDateOrToday: date => /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? date : '2026-09-05',
@@ -460,6 +466,135 @@ describe('Board edits against in-flight captures', () => {
     const res = await patchTask(routes, 't_missing', { status: 'done' });
     assert.equal(res.statusCode, 404);
     assert.equal(kv.writes, 0);
+  });
+});
+
+describe('meetings compare-and-set store', () => {
+  const seed = (kv, meetings) => kv.values.set('meetings', JSON.stringify(meetings));
+
+  test('writes the mutation and bumps the version', async () => {
+    const kv = new MemoryKV();
+    seed(kv, [{ id: 'm', title: 'Old' }]);
+    const outcome = await updateMeetings(kv, meetings => ({ meetings: meetings.map(m => ({ ...m, title: 'New' })), touched: meetings.length }));
+    assert.equal(outcome.touched, 1);
+    assert.deepEqual(await kv.get('meetings'), [{ id: 'm', title: 'New' }]);
+    assert.equal(await kv.get(MEETINGS_VERSION_KEY), 1);
+    assert.equal(await kv.get(TASKS_VERSION_KEY), null, 'the tasks counter is untouched');
+  });
+
+  test('returning null writes nothing', async () => {
+    const kv = new MemoryKV();
+    seed(kv, [{ id: 'm' }]);
+    assert.equal(await updateMeetings(kv, () => null), null);
+    assert.equal(kv.writes, 0);
+  });
+
+  test('a write that lands between read and commit is not overwritten: both writers survive', async () => {
+    const kv = new MemoryKV();
+    seed(kv, [{ id: 'm', title: 'Old' }]);
+    let runs = 0;
+    kv.onBeforeEval = async () => {
+      const current = JSON.parse(kv.values.get('meetings'));
+      kv.values.set('meetings', JSON.stringify([{ id: 'm_capture_day', title: 'Quick captures' }, ...current]));
+      kv.values.set(MEETINGS_VERSION_KEY, '1');
+    };
+    await updateMeetings(kv, meetings => { runs++; return { meetings: meetings.map(m => m.id === 'm' ? { ...m, title: 'New' } : m) }; });
+    assert.equal(runs, 2);
+    const meetings = await kv.get('meetings');
+    assert.deepEqual(meetings.map(m => m.id), ['m_capture_day', 'm']);
+    assert.equal(meetings.find(m => m.id === 'm').title, 'New');
+    assert.equal(await kv.get(MEETINGS_VERSION_KEY), 2);
+  });
+
+  test('gives up with a typed error when writers keep colliding', async () => {
+    const kv = new MemoryKV();
+    seed(kv, []);
+    const colliding = { ...kv, get: kv.get.bind(kv), eval: async () => { kv.values.set(MEETINGS_VERSION_KEY, String(Math.random())); return 0; } };
+    await assert.rejects(updateMeetings(colliding, meetings => ({ meetings }), { attempts: 2 }),
+      error => error instanceof MeetingStoreError && error.code === 'meetings_write_conflict');
+  });
+});
+
+describe('meeting edits against in-flight captures', () => {
+  const DAY_MEETING = /^m_capture_day_/;
+  async function meetingRoute(routes, method, id, body = {}) {
+    const handler = await routes.load('../pages/api/meetings/[id].js');
+    const res = response();
+    await handler({ method, query: { id }, headers: { authorization: 'Bearer test-one' }, body }, res);
+    return res;
+  }
+  const seedMeeting = kv => kv.values.set('meetings', JSON.stringify([{ id: 'm_old', userId: 'user-one', title: 'Kickoff', participants: [] }]));
+
+  test('a meeting edit paused after its read cannot erase the capture that commits meanwhile; the next capture appends', async () => {
+    const kv = new MemoryKV(), routes = await routeHarness(kv);
+    seedMeeting(kv);
+    // The review's interleaving: the edit has read `meetings`; FIRST CAPTURE commits; the stale edit finishes.
+    kv.onBeforeEval = async script => {
+      assert.equal(script, MEETINGS_CAS_SCRIPT);
+      assert.equal((await routes.request('structured', { transcript: 'FIRST CAPTURE' })).statusCode, 200);
+    };
+    const edit = await meetingRoute(routes, 'PATCH', 'm_old', { title: 'Kickoff (renamed)' });
+    assert.equal(edit.statusCode, 200);
+    assert.equal(edit.body.meeting.title, 'Kickoff (renamed)');
+    // SECOND CAPTURE lands on the same local day.
+    assert.equal((await routes.request('structured', { id: OTHER_ID, transcript: 'SECOND CAPTURE' })).statusCode, 200);
+
+    const meetings = await kv.get('meetings');
+    assert.deepEqual(meetings.map(m => m.title), ['Quick captures — Sep 5, 2026', 'Kickoff (renamed)'], 'the day meeting survived the stale edit');
+    const day = meetings.find(m => DAY_MEETING.test(m.id));
+    const log = (await kv.get(`meeting:${day.id}:transcript`)).text.split('\n\n');
+    assert.equal(log.length, 2);
+    assert.match(log[0], /FIRST CAPTURE$/);
+    assert.match(log[1], /SECOND CAPTURE$/);
+    assert.equal(await kv.get(MEETINGS_VERSION_KEY), 3);   // two captures + one edit
+    assert.equal(await kv.get(TASKS_VERSION_KEY), 2);      // the edit never touched tasks
+  });
+
+  test('a capture whose day meeting row was lost recreates the row and still appends to the existing transcript log', async () => {
+    const kv = new MemoryKV(), routes = await routeHarness(kv);
+    assert.equal((await routes.request('structured', { transcript: 'FIRST CAPTURE' })).statusCode, 200);
+    const [day] = await kv.get('meetings');
+    // Simulate the pre-fix damage: a stale writer dropped the row but the transcript key is intact.
+    kv.values.set('meetings', '[]');
+    assert.equal((await routes.request('structured', { id: OTHER_ID, transcript: 'SECOND CAPTURE' })).statusCode, 200);
+    const meetings = await kv.get('meetings');
+    assert.equal(meetings.length, 1);
+    assert.equal(meetings[0].id, day.id, 'the same day meeting id is recreated');
+    const log = (await kv.get(`meeting:${day.id}:transcript`)).text.split('\n\n');
+    assert.equal(log.length, 2, 'the first capture is not overwritten');
+    assert.match(log[0], /FIRST CAPTURE$/);
+    assert.match(log[1], /SECOND CAPTURE$/);
+  });
+
+  test('PATCH updates title, date and participants; a missing meeting is a 404 with no write', async () => {
+    const kv = new MemoryKV(), routes = await routeHarness(kv);
+    seedMeeting(kv);
+    const res = await meetingRoute(routes, 'PATCH', 'm_old', { title: 'Renamed', date: '2026-09-06', participants: ['Alex'] });
+    assert.equal(res.statusCode, 200);
+    const [meeting] = await kv.get('meetings');
+    assert.equal(meeting.title, 'Renamed');
+    assert.equal(meeting.date, '2026-09-06');
+    assert.deepEqual(meeting.participants, ['Alex']);
+    assert.ok(meeting.updatedAt);
+    assert.equal(kv.writes, 1);
+    const missing = await meetingRoute(routes, 'PATCH', 'm_missing', { title: 'x' });
+    assert.equal(missing.statusCode, 404);
+    assert.equal(kv.writes, 1);
+  });
+
+  test('DELETE removes the meeting, its tasks and transcript under compare-and-set', async () => {
+    const kv = new MemoryKV(), routes = await routeHarness(kv);
+    seedMeeting(kv);
+    kv.values.set('tasks', JSON.stringify([{ id: 't1', userId: 'user-one', meetingId: 'm_old' }, { id: 't2', userId: 'user-one', meetingId: 'other' }]));
+    const res = await meetingRoute(routes, 'DELETE', 'm_old');
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.deletedMeeting, 'Kickoff');
+    assert.equal(res.body.deletedTaskCount, 1);
+    assert.deepEqual(await kv.get('meetings'), []);
+    assert.deepEqual((await kv.get('tasks')).map(t => t.id), ['t2']);
+    assert.deepEqual(routes.calls.transcriptsDeleted, ['m_old']);
+    assert.equal(await kv.get(MEETINGS_VERSION_KEY), 1);
+    assert.equal(await kv.get(TASKS_VERSION_KEY), 1);
   });
 });
 

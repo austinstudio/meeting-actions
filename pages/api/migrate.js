@@ -16,7 +16,6 @@ export default async function handler(req, res) {
 
   try {
     // Get all existing data
-    let meetings = await kv.get('meetings') || [];
     let columns = await kv.get('columns') || [];
 
     // Tasks: assign userId under compare-and-set (lib/task-store.mjs)
@@ -25,17 +24,14 @@ export default async function handler(req, res) {
       tasksToMigrate: tasks.filter(t => !t.userId).length,
     }));
 
-    // Count items without userId
-    const meetingsToMigrate = meetings.filter(m => !m.userId).length;
-    const columnsToMigrate = columns.filter(c => c.custom && !c.userId).length;
+    // Meetings: assign userId under compare-and-set (lib/meeting-store.js)
+    const { meetingsToMigrate } = await updateMeetings(kv, meetings => ({
+      meetings: meetings.map(meeting => meeting.userId ? meeting : { ...meeting, userId }),
+      meetingsToMigrate: meetings.filter(m => !m.userId).length,
+    }));
 
-    // Assign userId to all meetings without one
-    meetings = meetings.map(meeting => {
-      if (!meeting.userId) {
-        return { ...meeting, userId };
-      }
-      return meeting;
-    });
+    // Count custom columns without userId
+    const columnsToMigrate = columns.filter(c => c.custom && !c.userId).length;
 
     // Assign userId to custom columns without one
     columns = columns.map(column => {
@@ -45,8 +41,7 @@ export default async function handler(req, res) {
       return column;
     });
 
-    // Save everything back
-    await kv.set('meetings', meetings);
+    // Save columns back
     await kv.set('columns', columns);
 
     return res.status(200).json({
