@@ -1,15 +1,16 @@
 // pages/api/capture/board.js
-// The Quick Notes phone app's board view: the user's live board tasks (inbox and done-over-30-days
-// excluded — see lib/capture-board.mjs boardTasks), due-date first, plus per-column and per-person counts
-// over ALL live tasks so the phone never derives totals from a truncated slice, the column list and the
-// triage stats. `truncated`/`totalBoardTasks` tell the phone when `limit` cut the list.
+// The Quick Notes phone app's board view: the user's OPEN board tasks (inbox and done excluded — the phone
+// renders neither; see lib/capture-board.mjs boardTasks), due-date first, plus per-column, per-person,
+// overdue and follow-up counts over ALL live tasks so the phone never derives totals from a truncated
+// slice, the column list and the triage stats. `truncated`/`totalBoardTasks` tell the phone when `limit`
+// cut the list.
 // GET /api/capture/board?limit=N&tz=<IANA zone>   Auth: session cookie or Authorization: Bearer <token>.
 // Response fields are a contract with the phone app; do not rename them.
 
 import { kv } from '@vercel/kv';
 import { requireAuth } from '../../../lib/auth';
 import { computeTriageStats } from '../../../lib/triage-stats.mjs';
-import { assigneeCounts, boardTasks, byDueThenCreated, columnCounts, liveTasks, meetingTitleIndex, parseLimit, serializeTask } from '../../../lib/capture-board.mjs';
+import { assigneeCounts, boardTasks, byDueThenCreated, columnCounts, followUpCount, liveTasks, meetingTitleIndex, overdueCount, parseLimit, serializeTask } from '../../../lib/capture-board.mjs';
 import { DEFAULT_COLUMNS } from '../../../components/constants';
 
 export default async function handler(req, res) {
@@ -41,6 +42,8 @@ export default async function handler(req, res) {
       assigneeCounts: assigneeCounts(live),
       truncated: board.length > limit,
       totalBoardTasks: board.length,
+      overdueCount: overdueCount(live, { tz }),
+      followUpCount: followUpCount(live),
     });
   } catch (error) {
     console.error('capture/board error:', error);

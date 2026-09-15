@@ -304,23 +304,24 @@ describe('GET /api/capture/board', () => {
     const res = await routes.board({ tz: 'America/Chicago' });
     assert.equal(res.statusCode, 200);
     assert.equal(res.headers['Cache-Control'], 'private, no-store');
-    assert.deepEqual(Object.keys(res.body).sort(), ['assigneeCounts', 'columnCounts', 'columns', 'inboxCount', 'tasks', 'totalBoardTasks', 'triage', 'truncated']);
-    // dated tasks ascending; the five uncategorized tasks belong to the inbox route and are not listed here
-    assert.deepEqual(res.body.tasks.map(t => t.id), ['done', 'todo-soon', 'todo-later']);
+    assert.deepEqual(Object.keys(res.body).sort(), ['assigneeCounts', 'columnCounts', 'columns', 'followUpCount', 'inboxCount', 'overdueCount', 'tasks', 'totalBoardTasks', 'triage', 'truncated']);
+    // dated open tasks ascending; the five uncategorized tasks belong to the inbox route and the done task
+    // to the website's Done column (the phone renders neither), so neither is listed here
+    assert.deepEqual(res.body.tasks.map(t => t.id), ['todo-soon', 'todo-later']);
     assert.equal(res.body.inboxCount, 5, 'inboxCount still counts the inbox');
     for (const t of res.body.tasks) {
       assert.deepEqual(Object.keys(t), TASK_FIELDS);
       assert.equal(t.archived, false);
+      assert.equal(t.status, 'todo');
     }
-    assert.equal(res.body.tasks[0].status, 'done');
-    assert.equal(res.body.tasks[1].status, 'todo');
-    assert.ok(!res.body.tasks.some(t => t.status === 'uncategorized'));
-    assert.ok(!res.body.tasks.some(t => ['trashed', 'archived', 'theirs'].includes(t.id)));
-    // counts cover every live task, so the inbox column is right even though its tasks are not listed
+    assert.ok(!res.body.tasks.some(t => ['trashed', 'archived', 'theirs', 'done'].includes(t.id)));
+    // counts cover every live task, so the inbox and Done columns are right even though their tasks are not listed
     assert.deepEqual(res.body.columnCounts, { uncategorized: 5, done: 1, todo: 2 });
     assert.deepEqual(res.body.assigneeCounts, []);
     assert.equal(res.body.truncated, false);
-    assert.equal(res.body.totalBoardTasks, 3);
+    assert.equal(res.body.totalBoardTasks, 2);
+    assert.equal(res.body.overdueCount, 2, 'todo-soon and todo-later are past due on the server clock; the done task is not counted');
+    assert.equal(res.body.followUpCount, 0);
     assert.deepEqual(res.body.columns, [
       ...constants.DEFAULT_COLUMNS.map(c => ({ id: c.id, label: c.label })),
       { id: 'blocked', label: 'Blocked' },
@@ -332,12 +333,12 @@ describe('GET /api/capture/board', () => {
     const routes = await routeHarness(seededKV());
     const res = await routes.board();
     // todo-soon (due 09-09) precedes todo-later (due 09-10); the same-day rule is covered by the inbox tests
-    assert.deepEqual(res.body.tasks.slice(1, 3).map(t => t.id), ['todo-soon', 'todo-later']);
+    assert.deepEqual(res.body.tasks.map(t => t.id), ['todo-soon', 'todo-later']);
     const one = await routes.board({ limit: '1' });
-    assert.deepEqual(one.body.tasks.map(t => t.id), ['done']);
+    assert.deepEqual(one.body.tasks.map(t => t.id), ['todo-soon']);
     assert.equal(one.body.inboxCount, 5, 'inboxCount is not truncated');
     assert.equal(one.body.truncated, true);
-    assert.equal(one.body.totalBoardTasks, 3, 'the total is counted before the slice');
+    assert.equal(one.body.totalBoardTasks, 2, 'the total is counted before the slice');
     assert.deepEqual(one.body.columnCounts, { uncategorized: 5, done: 1, todo: 2 }, 'counts are not truncated');
 
     // 1200 live tasks, half inbox: the board lists only the 600 todo ones, oldest createdAt first
@@ -362,39 +363,62 @@ describe('GET /api/capture/board', () => {
     assert.equal(capped.totalBoardTasks, 1100);
   });
 
-  test('done tasks finished more than 30 days ago drop off the board list but stay in the counts', async () => {
-    const recent = new Date(Date.now() - 2 * 86_400_000).toISOString();
-    const ancient = '2020-01-01T00:00:00.000Z';
+  test('done tasks never take a slot in the phone list but stay in the counts (they leave via Archive Completed on the website)', async () => {
     const kv = new MemoryKV().seed('tasks', [
-      task('done-recent', { status: 'done', updatedAt: recent }),
-      task('done-ancient', { status: 'done', updatedAt: ancient }),
-      task('done-by-activity', { status: 'done', updatedAt: ancient, activity: [{ type: 'update', field: 'status', oldValue: 'todo', newValue: 'done', timestamp: recent }] }),
+      task('done-recent', { status: 'done', updatedAt: new Date().toISOString() }),
+      task('done-ancient', { status: 'done', updatedAt: '2020-01-01T00:00:00.000Z' }),
       task('done-undated', { status: 'done' }),
-      task('done-created-long-ago', { status: 'done', createdAt: ancient }),
       task('open', { status: 'todo' }),
+      task('waiting', { status: 'waiting' }),
+      task('no-status', { status: undefined }),           // a missing status is the inbox, not the board
     ]);
     const res = (await (await routeHarness(kv)).board()).body;
-    assert.deepEqual(res.tasks.map(t => t.id).sort(), ['done-by-activity', 'done-recent', 'done-undated', 'open']);
-    assert.deepEqual(res.columnCounts, { done: 5, todo: 1 }, 'the Done column still counts every done task');
-    assert.equal(res.totalBoardTasks, 4);
+    assert.deepEqual(res.tasks.map(t => t.id).sort(), ['open', 'waiting']);
+    assert.deepEqual(res.columnCounts, { done: 3, todo: 1, waiting: 1, uncategorized: 1 }, 'the Done column still counts every done task');
+    assert.equal(res.totalBoardTasks, 2);
+    assert.equal(res.truncated, false);
+    assert.equal(res.followUpCount, 1);
+    assert.ok(!('DONE_RETENTION_DAYS' in captureBoard) && !('completedTime' in captureBoard), 'the 30-day rule is gone');
+  });
 
-    // the age rule itself, with a fixed clock
-    const now = Date.parse('2026-09-15T12:00:00Z');
-    const day = 86_400_000;
+  test('overdueCount counts open tasks due before today in the requested zone; followUpCount is the waiting column', async () => {
+    // 2026-09-09T03:30Z is still Sep 8 in Chicago but already Sep 9 in UTC and Tokyo.
+    const now = new Date('2026-09-09T03:30:00Z');
     const live = [
-      { id: 'edge-in', status: 'done', updatedAt: new Date(now - 29 * day).toISOString() },
-      { id: 'edge-out', status: 'done', updatedAt: new Date(now - 31 * day).toISOString() },
-      { id: 'inbox', status: 'uncategorized' },
-      { id: 'todo', status: 'todo', updatedAt: new Date(now - 400 * day).toISOString() },
+      { id: 'due-sep-8', status: 'todo', dueDate: '2026-09-08' },        // overdue only once Sep 9 has started locally
+      { id: 'due-sep-1', status: 'waiting', dueDate: '2026-09-01' },     // overdue everywhere, and a follow-up
+      { id: 'due-sep-9', status: 'todo', dueDate: '2026-09-09' },        // due today (UTC/Tokyo) or tomorrow (Chicago): never overdue
+      { id: 'done-late', status: 'done', dueDate: '2026-09-01' },        // done: not overdue
+      { id: 'inbox-late', status: 'uncategorized', dueDate: '2026-09-01' },   // inbox: not overdue
+      { id: 'no-status-late', dueDate: '2026-09-01' },                   // missing status = inbox
+      { id: 'undated', status: 'todo' },
+      { id: 'malformed', status: 'todo', dueDate: 'soon' },
+      { id: 'timestamp', status: 'todo', dueDate: '2026-09-01T00:00:00Z' },   // not YYYY-MM-DD: ignored rather than guessed
+      { id: 'waiting-undated', status: 'waiting' },
     ];
-    assert.deepEqual(captureBoard.boardTasks(live, { now }).map(t => t.id), ['edge-in', 'todo']);
-    assert.equal(captureBoard.completedTime({ status: 'done' }), NaN);
-    assert.equal(captureBoard.completedTime({ status: 'done', updatedAt: 'garbage', createdAt: '2026-09-01T00:00:00Z' }), Date.parse('2026-09-01T00:00:00Z'));
-    assert.equal(captureBoard.completedTime({ status: 'done', updatedAt: '2026-09-10T00:00:00Z', activity: [
-      { field: 'status', newValue: 'done', timestamp: '2026-09-02T00:00:00Z' },
-      { field: 'status', newValue: 'done', timestamp: '2026-09-05T00:00:00Z' },
-      { field: 'status', newValue: 'todo', timestamp: '2026-09-09T00:00:00Z' },
-    ] }), Date.parse('2026-09-05T00:00:00Z'), 'latest status→done activity wins over updatedAt');
+    assert.equal(captureBoard.todayKey('America/Chicago', now), '2026-09-08');
+    assert.equal(captureBoard.todayKey('UTC', now), '2026-09-09');
+    assert.equal(captureBoard.todayKey('Not/AZone', now), '2026-09-09', 'invalid zone falls back to UTC');
+    assert.equal(captureBoard.overdueCount(live, { now, tz: 'America/Chicago' }), 1);
+    assert.equal(captureBoard.overdueCount(live, { now, tz: 'UTC' }), 2);
+    assert.equal(captureBoard.overdueCount(live, { now, tz: 'Asia/Tokyo' }), 2);
+    assert.equal(captureBoard.overdueCount(live, { now, tz: 'Not/AZone' }), 2);
+    assert.equal(captureBoard.followUpCount(live), 2);
+
+    // through the route: tz comes from the query, the clock is the server's
+    const kv = new MemoryKV().seed('tasks', [
+      task('late', { status: 'todo', dueDate: '2000-01-01' }),
+      task('future', { status: 'todo', dueDate: '2999-12-31' }),
+      task('late-done', { status: 'done', dueDate: '2000-01-01' }),
+      task('follow', { status: 'waiting' }),
+      task('theirs', { status: 'waiting', dueDate: '2000-01-01', userId: 'user-two' }),
+    ]);
+    const routes = await routeHarness(kv);
+    const res = (await routes.board({ tz: 'America/Chicago' })).body;
+    assert.equal(res.overdueCount, 1);
+    assert.equal(res.followUpCount, 1);
+    assert.equal(res.columnCounts.waiting, 1);
+    assert.equal((await routes.board({ limit: '1' })).body.overdueCount, 1, 'counts are not truncated');
   });
 
   test('assigneeCounts rank people across owner and person on open board tasks only', async () => {
@@ -490,7 +514,8 @@ describe('Triage actions through /api/tasks/[id] with a bearer token', () => {
     assert.equal(Object.values(inbox.body.triage.clearedByDay).reduce((a, b) => a + b, 0), 2);
     assert.equal((await routes.context()).body.triage.cleared30Days, 2);
     const board = await routes.board();
-    assert.deepEqual(board.body.tasks.map(t => [t.id, t.status]), [['a', 'todo'], ['b', 'done']]);
+    assert.deepEqual(board.body.tasks.map(t => [t.id, t.status]), [['a', 'todo']], 'the done task leaves the phone list');
+    assert.equal(board.body.columnCounts.done, 1, 'but still counts in its column');
     assert.equal(board.body.inboxCount, 0);
     assert.equal(board.body.triage.cleared30Days, 2);
   });
