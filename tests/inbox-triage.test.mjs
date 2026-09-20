@@ -5,6 +5,7 @@ import { describe, test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
 import * as taskStore from '../lib/task-store.mjs';
+import * as relationshipsStore from '../lib/relationships-store.mjs';
 import * as triageStats from '../lib/triage-stats.mjs';
 import * as captureBoard from '../lib/capture-board.mjs';
 import * as constants from '../components/constants.js';
@@ -58,6 +59,7 @@ async function routeHarness(kv) {
       getUserName: async () => 'Test User',
     },
     'task-store.mjs': taskStore,
+    'relationships-store.mjs': relationshipsStore,   // PRD-14 ingest hooks (best-effort; no roster in these tests)
     'triage-stats.mjs': triageStats,
     'capture-board.mjs': captureBoard,
     constants,

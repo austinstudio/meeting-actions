@@ -13,6 +13,7 @@ import { getKnownPeople, extractWithGemini, buildTaskRecords, localDateOrToday }
 import { notifyIngestFailure, withIngestAlert } from '../../../lib/alerts';
 import { captureIdentity, findCaptureResponse, captureTaskIDs, commitCapture, sendCaptureError, dailyMeeting, captureEntryText } from '../../../lib/capture-idempotency.mjs';
 import { captureSourceID, captureSourceMeta } from '../../../lib/capture-sources.mjs';
+import { recordMeetingSignals } from '../../../lib/relationships-store.mjs';
 
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -87,7 +88,11 @@ async function handler(req, res) {
   if (body.dryRun === true) return res.status(200).json({ ...response, dryRun: true });
   if (capture) {
     const transcriptEntry = captureEntryText(transcript, body.recordedAt, typeof body.timeZone === 'string' ? body.timeZone : undefined);
-    return res.status(200).json(await commitCapture(kv, capture, { meeting, tasks: newTasks, response, transcriptEntry }));
+    const committed = await commitCapture(kv, capture, { meeting, tasks: newTasks, response, transcriptEntry });
+    // Relationships (PRD-14): roster people in the meeting get a touch (sourceRef = meeting id, so a day meeting
+    // touches once). Best-effort; never fails the capture.
+    try { await recordMeetingSignals(kv, meeting, { userId }); } catch (e) { console.error('relationships meeting signal failed:', e?.message || e); }
+    return res.status(200).json(committed);
   }
   await addMeetingWithTasks(meeting, newTasks);
   console.log(`Structured capture (${parsedBy}): ${newTasks.length} tasks from ${source}`);

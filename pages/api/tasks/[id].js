@@ -5,6 +5,7 @@
 import { kv } from '@vercel/kv';
 import { requireAuth, getUserName } from '../../../lib/auth';
 import { updateTasks } from '../../../lib/task-store.mjs';
+import { recordTaskDone } from '../../../lib/relationships-store.mjs';
 
 // Helper to generate activity log entry
 function createActivityEntry(type, field, oldValue, newValue, user = 'Unknown') {
@@ -132,8 +133,10 @@ export default async function handler(req, res) {
         // Track changes and create activity entries
         const changes = [];
 
+        let becameDone = false;
         if (status !== undefined && status !== currentTask.status) {
           changes.push(createActivityEntry('update', 'status', currentTask.status, status, userName));
+          becameDone = status === 'done' && currentTask.status !== 'done';
           currentTask.status = status;
         }
         if (priority !== undefined && priority !== currentTask.priority) {
@@ -226,9 +229,16 @@ export default async function handler(req, res) {
 
         currentTask.updatedAt = new Date().toISOString();
         tasks[taskIndex] = currentTask;
-        return { tasks, task: currentTask };
+        return { tasks, task: currentTask, becameDone };
       });
       if (!outcome) return res.status(404).json({ error: 'Task not found' });
+
+      // Relationships (PRD-14): finishing a task for or from a roster person is an inferred work touch
+      // (half weight on the client). Best-effort; never fails the update.
+      if (outcome.becameDone) {
+        try { await recordTaskDone(kv, outcome.task, { userId, tasks: outcome.tasks }); }
+        catch (e) { console.error('relationships task signal failed:', e?.message || e); }
+      }
 
       return res.status(200).json({
         success: true,

@@ -11,6 +11,7 @@ import { VercelKV } from '@vercel/kv';
 import * as idempotency from '../lib/capture-idempotency.mjs';
 import * as captureSources from '../lib/capture-sources.mjs';
 import * as taskStore from '../lib/task-store.mjs';
+import * as relationshipsStore from '../lib/relationships-store.mjs';
 
 const { updateTasks, TaskStoreError, TASKS_CAS_SCRIPT, TASKS_VERSION_KEY } = taskStore;
 
@@ -111,6 +112,7 @@ async function routeHarness(kv) {
       return user || null;
     }, getUserName: async () => 'Test User' },
     'task-store.mjs': taskStore,
+    'relationships-store.mjs': relationshipsStore,   // PRD-14 ingest hooks (best-effort; no roster in these tests)
     'meeting-store': { addMeetingWithTasks: async () => { calls.legacySave++; }, updateMeetings, deleteTranscript: async id => { calls.transcriptsDeleted.push(id); } },
     extract: {
       getKnownPeople: async () => [],
