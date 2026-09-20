@@ -59,7 +59,7 @@ queue = people with score > 0, descending score
 |---|---|---|
 | `GET /api/relationships` | — | `{ people: [Person], reviewCount: n, updatedAt }` (both lists, rank order) |
 | `PUT /api/relationships/roster` | `{ crew: [contactId…], guests: [contactId…] }` | `{ people }` — full order; ranks rewritten 1…n per list; CAS |
-| `POST /api/relationships/roster` | `{ contactId, list, cadenceDays? }` | `201 { person }`; appended at the end of the list; default cadence 7 (crew) / 14 (guests); `409` if already on a list |
+| `POST /api/relationships/roster` | `{ contactId, list, cadenceDays? }` | `201 { person, backfill }`; appended at the end of the list; default cadence 7 (crew) / 14 (guests); `409` if already on a list. The add runs the backfill (below) inline and returns its summary (or `{ error: "backfill_failed" }`; the add itself never fails because of it) |
 | `DELETE /api/relationships/roster/<contactId>` | — | `{ ok }` — contact untouched; the person key gets `removedAt` (cleared if they are re-added; a 30-day purge is not built yet) |
 | `PATCH /api/relationships/<contactId>` | `{ cadenceDays?, holdUntil?: string\|null, list?, mutedSources?: [string] }` | `{ person, mutedSources }` — editing cadence/hold keeps the rank position; `list` moves the person to the end of the other list |
 | `POST /api/relationships/<contactId>/touches` | `{ at?, channel, about?, direction? }` (defaults now / `out`) | `201 { touch, rollup }` |
@@ -70,6 +70,7 @@ queue = people with score > 0, descending score
 | `DELETE /api/relationships/<contactId>/squawks/<id>` | — | `{ ok }` |
 | `POST /api/relationships/<contactId>/pins` | `{ taskId }` | `{ pinnedTaskIds }` |
 | `DELETE /api/relationships/<contactId>/pins/<taskId>` | — | `{ pinnedTaskIds }` |
+| `POST /api/relationships/<contactId>/backfill` | — | "Rescan": `{ touchesAdded, bySource: { meeting, mail, transcript, task }, commands, ms, partial }` — see §Backfill. `404` when not on the roster |
 | `GET /api/relationships/<contactId>/rundown` | — | `{ person, squawks, threads: [Thread], mentions: [{source, text, at, ref}] (≤ 20), touches: [Touch] (≤ 10), pinnedTaskIds, mutedSources }` |
 | `GET /api/relationships/review` | — | `{ items: [ReviewItem] }` oldest first, ≤ 50 |
 | `POST /api/relationships/review/<id>` | `{ accept: bool, aliasOf?: contactId }` | accept → `{ accepted: true, touch, rollup }` (medium, `inferred: false`, written to `aliasOf` when given); reject → `{ accepted: false, mutedSources }`; 3 rejections of one `source` for a person add it to `mutedSources` |
@@ -94,6 +95,24 @@ skips muted sources, then: `high` or `inferred` or ≥ 10 accepted from that sou
 Returns `{ outcome: touch|review|skipped, reason? }` and never throws for bad names or channels. Callers in phase 0: `addMeetingWithTasks` / `commitCapture` (meeting
 participants and title mentions, high), `PATCH /api/tasks/[id]` status → done (work, medium, `inferred: true`,
 written directly as a half-weight touch, never to review).
+
+## Backfill (`backfillPerson`, run on add and by `POST …/backfill`)
+
+Historical touches from what is already in KV, gathered first and written in **one** person update so the
+`seen` de-dupe applies (a rescan never doubles a touch; a later live signal for the same meeting or task is a
+no-op because the sourceRefs match the feeds': `meeting:<id>`, `task-done:<id>`, `email:<id>`).
+
+| Source | Rule | Touch |
+|---|---|---|
+| Meetings (≤ 730 days) | contact in `participants[]`, or named ≥ 2× in title + summary | meeting · both · high · `about` = title |
+| Emails | newest 1,500 ids of `emails:by_date` (one ZRANGE), MGET in chunks of 200; match when the contact's `email` equals `sender_email` or appears in `to[]`/`cc[]` (addresses extracted from "Name <addr>"), or, only when the contact has no email on file, when `sender_name` resolves uniquely to the contact | mail · in · high · `about` = subject · `at` = `sent_at` |
+| Transcripts (≤ 90 days) | meetings not matched above, newest first, ≤ 40 reads of `meeting:<id>:transcript`; named ≥ 2× | meeting · both · high |
+| Done tasks | `status == done`, owner or person resolves to the contact; ≤ 100 newest; `at` = the status→done activity timestamp, else `updatedAt`, else `createdAt` | work · out · medium · `inferred: true` |
+
+Budget: 600 KV commands and 15 s per person (`countingKV`); when either runs out the pass writes what it has and
+returns `partial: true`. A typical rescan costs roughly 15–60 commands (3–4 array reads, 1 ZRANGE, ≤ 8 MGETs,
+up to 40 transcript GETs, one CAS write). Glimpse, Chronos and Applaud data live on the Mac and are not
+reachable here; those arrive through the phase-2 feeds.
 
 ## Storage
 

@@ -7,6 +7,7 @@ import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
 import * as taskStore from '../lib/task-store.mjs';
 import * as relationshipsStore from '../lib/relationships-store.mjs';
 import * as relationshipsRoutes from '../lib/relationships-routes.mjs';
+import * as relationshipsBackfill from '../lib/relationships-backfill.mjs';
 import { CAS_SCRIPT } from '../lib/cas.mjs';
 
 const S = relationshipsStore;
@@ -312,6 +313,7 @@ async function routeHarness(kv, env = {}) {
     'task-store.mjs': taskStore,
     'relationships-store.mjs': relationshipsStore,
     'relationships-routes.mjs': relationshipsRoutes,
+    'relationships-backfill.mjs': relationshipsBackfill,
   };
   async function load(relativePath) {
     const context = createContext({ process: { env }, console: { log() {}, error() {} } });
