@@ -2,6 +2,8 @@
 // The Quick Notes phone app's Triage mode: the user's uncategorized tasks, oldest first, plus
 // the clear counts that drive the inbox burn-down dial.
 // GET /api/capture/inbox?limit=N&tz=<IANA zone>   Auth: session cookie or Authorization: Bearer <token>.
+//                        &order=oldest|newest      Page from the oldest end (default) or the newest: the phone's
+//                                                  Triage order toggle. inboxCount/triage are unaffected.
 // GET /api/capture/inbox?ids=a,b,c                 The named tasks (any status, up to 20, in the order
 //                                                  asked) instead of the oldest page — the phone opens
 //                                                  Triage on a task tapped in Captures, which is at the
@@ -42,6 +44,7 @@ export default async function handler(req, res) {
     const titles = meetingTitleIndex(meetings, userId);
     const live = liveTasks(tasks, userId);
     const inbox = live.filter(t => t.status === 'uncategorized').sort(byCreatedAt);
+    if (req.query.order === 'newest') inbox.reverse();
     const ids = parseIds(req.query.ids);
     // By id: any of the user's tasks, archived or trashed included (flags tell the client which).
     const mine = ids.length > 0 ? tasks.filter(t => t && t.userId === userId) : [];

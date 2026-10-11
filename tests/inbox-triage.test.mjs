@@ -289,6 +289,15 @@ describe('GET /api/capture/inbox', () => {
     assert.equal((await routes.inbox({ ids: '' })).body.tasks.length, 5, 'empty ids falls back to the oldest page');
   });
 
+  test('order=newest pages from the newest end; anything else is oldest first', async () => {
+    const routes = await routeHarness(seededKV());
+    const newest = await routes.inbox({ order: 'newest', limit: '3' });
+    assert.deepEqual(newest.body.tasks.map(t => t.id), ['bad-date', 'no-date', 'newest']);
+    assert.equal(newest.body.inboxCount, 5);
+    assert.deepEqual((await routes.inbox({ order: 'oldest', limit: '2' })).body.tasks.map(t => t.id), ['oldest', 'middle']);
+    assert.deepEqual((await routes.inbox({ order: 'sideways', limit: '2' })).body.tasks.map(t => t.id), ['oldest', 'middle']);
+  });
+
   test('limit truncates the list but not inboxCount; defaults to 50 and caps at 200', async () => {
     const routes = await routeHarness(seededKV());
     const two = await routes.inbox({ limit: '2' });
