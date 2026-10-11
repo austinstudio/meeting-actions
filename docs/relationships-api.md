@@ -14,7 +14,8 @@ RosterEntry  { "contactId": "c_…", "list": "crew" | "guests", "rank": 1, "cade
 Touch        { "id": "t_…", "at": "…", "channel": "meeting"|"call"|"chat"|"mail"|"work"|"note",
                "direction": "in"|"out"|"both", "about": "Q3 roadmap review",
                "source": "manual"|"meeting"|"task"|"glimpse"|"applaud"|"mail", "sourceRef": "m_…"|"task_…"|null,
-               "confidence": "high"|"medium", "inferred": false }
+               "confidence": "high"|"medium", "inferred": false,
+               "clientId"?: "…" }                                    // retry key sent with a manual touch (≤ 64 chars); absent otherwise
 
 Squawk       { "id": "s_…", "text": "Renewal pricing range", "type": "raise"|"feedback"|"ask",
                "createdAt": "…", "raisedAt": "…" | null, "source": "manual"|"voice" }
@@ -62,7 +63,7 @@ queue = people with score > 0, descending score
 | `POST /api/relationships/roster` | `{ contactId, list, cadenceDays? }` | `201 { person, backfill }`; appended at the end of the list; default cadence 7 (crew) / 14 (guests); `409` if already on a list. The add runs the backfill (below) inline and returns its summary (or `{ error: "backfill_failed" }`; the add itself never fails because of it) |
 | `DELETE /api/relationships/roster/<contactId>` | — | `{ ok }` — contact untouched; the person key gets `removedAt` (cleared if they are re-added; a 30-day purge is not built yet) |
 | `PATCH /api/relationships/<contactId>` | `{ cadenceDays?, holdUntil?: string\|null, list?, mutedSources?: [string] }` | `{ person, mutedSources }` — editing cadence/hold keeps the rank position; `list` moves the person to the end of the other list |
-| `POST /api/relationships/<contactId>/touches` | `{ at?, channel, about?, direction? }` (defaults now / `out`) | `201 { touch, rollup }` |
+| `POST /api/relationships/<contactId>/touches` | `{ at?, channel, about?, direction?, clientId? }` (defaults now / `out`; `clientId` a string ≤ 64 chars) | `201 { touch, rollup }`. Retry semantics: when the person already has a touch with the same `clientId` nothing is inserted and the call returns `200 { touch: existing, rollup }` (checked inside the person CAS, so a retried request can never double a touch); a non-string or over-long `clientId` is `400 { code: "bad_client_id" }` |
 | `DELETE /api/relationships/<contactId>/touches/<touchId>` | — | `{ rollup }` (undo) |
 | `GET /api/relationships/<contactId>/touches?limit=50` | — | `{ touches }` newest first |
 | `POST /api/relationships/<contactId>/squawks` | `{ text, type? }` (default `raise`) | `201 { squawk }` |
@@ -73,7 +74,7 @@ queue = people with score > 0, descending score
 | `POST /api/relationships/<contactId>/backfill` | — | "Rescan": `{ touchesAdded, bySource: { meeting, mail, transcript, task }, commands, ms, partial }` — see §Backfill. `404` when not on the roster |
 | `GET /api/relationships/<contactId>/rundown` | — | `{ person, squawks, threads: [Thread], mentions: [{source, text, at, ref}] (≤ 20), touches: [Touch] (≤ 10), pinnedTaskIds, mutedSources }` |
 | `GET /api/relationships/review` | — | `{ items: [ReviewItem] }` oldest first, ≤ 50 |
-| `POST /api/relationships/review/<id>` | `{ accept: bool, aliasOf?: contactId }` | accept → `{ accepted: true, touch, rollup }` (medium, `inferred: false`, written to `aliasOf` when given); reject → `{ accepted: false, mutedSources }`; 3 rejections of one `source` for a person add it to `mutedSources` |
+| `POST /api/relationships/review/<id>` | `{ accept: bool, aliasOf?: contactId }` | accept → `{ accepted: true, touch, rollup }` (medium, `inferred: false`, written to `aliasOf` when given); reject → `{ accepted: false, mutedSources }`; 3 rejections of one `source` for a person add it to `mutedSources`. The person write lands before the tray item is removed, so a failed write leaves the item in the tray; accepting an item whose `sourceRef` is already one of the person's touches returns that touch instead of inserting another (accept is idempotent) |
 | `GET /api/cron/relationships-rollup` | header `Authorization: Bearer $CRON_SECRET` | `{ people, holdsExpired, ms, commands }` — recompute rollups, expire holds, prune review to 50; ≤ 100 people, ≤ 400 KV commands (past the budget → `200 { partial: true }`), 20 s. Single-user: the roster owner is `INBOUND_EMAIL_USER_ID`. Scheduled 09:30 UTC in `vercel.json` |
 
 Errors: `400 { error, code }` for bad bodies; `404` for unknown contact / not on roster; `409 { code: "already_on_roster" }`.
@@ -92,6 +93,8 @@ more letters, case-insensitive. Sorted by due date, undated last. `gate` = last 
 the name through the contacts directory (id → exact name → alias → unique 3-letter first name), drops people not on
 the roster, de-duplicates on `sourceRef` (a `seen` list of 500 per person, shared by touches and review items),
 skips muted sources, then: `high` or `inferred` or ≥ 10 accepted from that source → touch; otherwise → ReviewItem.
+For a touch the ref joins `seen` in the same write; for a ReviewItem it joins `seen` in a second small person update
+only after the tray item is stored, so a failed ZADD leaves the signal retryable rather than swallowed as a duplicate.
 Returns `{ outcome: touch|review|skipped, reason? }` and never throws for bad names or channels. Callers in phase 0: `addMeetingWithTasks` / `commitCapture` (meeting
 participants and title mentions, high), `PATCH /api/tasks/[id]` status → done (work, medium, `inferred: true`,
 written directly as a half-weight touch, never to review).
@@ -99,8 +102,12 @@ written directly as a half-weight touch, never to review).
 ## Backfill (`backfillPerson`, run on add and by `POST …/backfill`)
 
 Historical touches from what is already in KV, gathered first and written in **one** person update so the
-`seen` de-dupe applies (a rescan never doubles a touch; a later live signal for the same meeting or task is a
-no-op because the sourceRefs match the feeds': `meeting:<id>`, `task-done:<id>`, `email:<id>`).
+de-dupe applies: a candidate is skipped when its ref is in `seen` **or** on a touch still in `person.touches`
+(a rescan never doubles a touch; a later live signal for the same meeting or task is a no-op because the
+sourceRefs match the feeds': `meeting:<id>`, `task-done:<id>`, `email:<id>`). When `seen` is trimmed to 500 the
+refs of the retained touches are kept first, so a pass that collects more than 500 refs cannot push a live touch's
+ref out and re-insert it on the next scan. `touchesAdded` counts only touches that survive the 200-touch cap; a
+candidate older than the oldest kept touch is skipped (and a scan that finds nothing else writes nothing).
 
 | Source | Rule | Touch |
 |---|---|---|

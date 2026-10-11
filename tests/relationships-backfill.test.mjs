@@ -140,6 +140,28 @@ describe('backfill sources', () => {
     assert.equal(kv.person('c_dan').touches.length, 2);
   });
 
+  test('a recent email survives the seen cap: 501 older meetings plus one email, and a second scan adds nothing', async () => {
+    const kv = await seeded();
+    // Meetings are collected before emails, so with > 500 refs the email's ref used to be the one trimmed off `seen`.
+    kv.seed('meetings', Array.from({ length: 501 }, (_, i) => meeting(`m${i}`, { participants: ['Dan Okafor'], date: daysAgo(10 + i) })));
+    seedEmails(kv, [email('e_recent', { sender_email: 'dan@northwind.com', sent_at: daysAgo(1) })]);
+    const first = await B.backfillPerson(kv, USER, 'c_dan', { now: NOW });
+    assert.equal(first.touchesAdded, S.TOUCH_CAP, '502 candidates, but only the 200 that survive the cap count as added');
+    assert.deepEqual(first.bySource, { meeting: 199, mail: 1, transcript: 0, task: 0 });
+    let p = kv.person('c_dan');
+    assert.equal(p.touches.length, S.TOUCH_CAP);
+    assert.equal(p.touches[0].sourceRef, 'email:e_recent', 'the email is the newest retained touch');
+    assert.equal(p.seen.length, S.SEEN_CAP);
+    assert.ok(p.seen.includes('email:e_recent'), 'a retained touch keeps its ref in seen');
+    assert.ok(p.touches.every(t => p.seen.includes(t.sourceRef)), 'every retained touch is covered by seen');
+    const again = await B.backfillPerson(kv, USER, 'c_dan', { now: NOW });
+    assert.equal(again.touchesAdded, 0, 'an immediate rescan inserts nothing');
+    assert.deepEqual(again.bySource, { meeting: 0, mail: 0, transcript: 0, task: 0 });
+    p = kv.person('c_dan');
+    assert.equal(p.touches.length, S.TOUCH_CAP);
+    assert.equal(p.touches.filter(t => t.sourceRef === 'email:e_recent').length, 1, 'the email is still a single touch');
+  });
+
   test('transcripts: only unmatched meetings within 90 days, newest first, at most 40 reads, named twice', async () => {
     const kv = await seeded();
     const meetings = [

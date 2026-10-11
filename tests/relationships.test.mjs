@@ -129,6 +129,30 @@ describe('touches and rollup', () => {
     await assert.rejects(S.addTouch(kv, USER, 'c_ayan', { channel: 'telepathy' }), e => e.code === 'bad_channel');
   });
 
+  test('clientId makes addTouch a safe retry: same id → one touch, different ids → two, none → as before', async () => {
+    const kv = await seeded();
+    const first = await S.addTouch(kv, USER, 'c_dan', { channel: 'call', about: 'Pricing', clientId: 'watch-abc' });
+    assert.equal(first.created, true); assert.equal(first.touch.clientId, 'watch-abc');
+    const evalsBefore = kv.log.filter(c => c === 'eval').length;
+    const again = await S.addTouch(kv, USER, 'c_dan', { channel: 'call', about: 'Pricing (retry)', clientId: 'watch-abc' });
+    assert.equal(again.created, false);
+    assert.equal(again.touch.id, first.touch.id, 'the existing touch comes back');
+    assert.equal(again.touch.about, 'Pricing', 'the retry body does not overwrite the stored touch');
+    assert.equal(again.rollup.lastTouchAbout, 'Pricing');
+    assert.equal(kv.log.filter(c => c === 'eval').length, evalsBefore, 'a retry writes nothing');
+    assert.equal(kv.person('c_dan').touches.length, 1);
+    const other = await S.addTouch(kv, USER, 'c_dan', { channel: 'call', about: 'Other', clientId: 'watch-def' });
+    assert.equal(other.created, true); assert.notEqual(other.touch.id, first.touch.id);
+    assert.equal(kv.person('c_dan').touches.length, 2);
+    const plain1 = await S.addTouch(kv, USER, 'c_dan', { channel: 'note', about: 'n' });
+    const plain2 = await S.addTouch(kv, USER, 'c_dan', { channel: 'note', about: 'n' });
+    assert.ok(plain1.created && plain2.created && plain1.touch.id !== plain2.touch.id, 'without a clientId every call inserts');
+    assert.ok(!('clientId' in plain1.touch), 'no clientId key unless one was sent');
+    assert.equal(kv.person('c_dan').touches.length, 4);
+    await assert.rejects(S.addTouch(kv, USER, 'c_dan', { channel: 'note', clientId: 'x'.repeat(65) }), e => e.code === 'bad_client_id');
+    await assert.rejects(S.addTouch(kv, USER, 'c_dan', { channel: 'note', clientId: 42 }), e => e.code === 'bad_client_id');
+  });
+
   test('threads follow the relation rules and the rollup counts them', () => {
     const ayan = CONTACTS[0];
     const tasks = [
@@ -255,6 +279,63 @@ describe('recordSignal', () => {
     assert.equal(res.accepted, true);
     assert.equal(kv.person('c_ayan').touches.length, 1);
     assert.equal(kv.person('c_dan').touches.length, 0);
+  });
+
+  test('accept writes the person before removing the tray item: a failed write keeps the item; accept twice is idempotent', async () => {
+    const kv = await seeded();
+    const r = await S.recordSignal(kv, { userId: USER, contactId: 'c_dan', at: daysAgo(0), channel: 'chat', about: 'x', source: 'glimpse', sourceRef: 'g:1' });
+    assert.equal(r.outcome, 'review');
+    // 1. The person write fails → nothing accepted, the item is still in the tray.
+    const realEval = kv.eval.bind(kv);
+    kv.eval = async () => { throw new Error('kv down'); };
+    await assert.rejects(S.resolveReview(kv, USER, r.item.id, { accept: true, contacts: CONTACTS, tasks: [] }), /kv down/);
+    kv.eval = realEval;
+    assert.equal(await S.reviewCount(kv, USER), 1, 'the item survived the failed write');
+    assert.equal(kv.person('c_dan').touches.length, 0);
+    // 2. The person write lands but the ZREM fails → the touch exists and the item lingers.
+    const realZrem = kv.zrem.bind(kv);
+    kv.zrem = async () => { throw new Error('zrem down'); };
+    await assert.rejects(S.resolveReview(kv, USER, r.item.id, { accept: true, contacts: CONTACTS, tasks: [] }), /zrem down/);
+    kv.zrem = realZrem;
+    assert.equal(kv.person('c_dan').touches.length, 1);
+    assert.equal(kv.person('c_dan').accepted.glimpse, 1);
+    assert.ok(kv.person('c_dan').seen.includes('g:1'));
+    assert.equal(await S.reviewCount(kv, USER), 1, 'the item lingers after the failed ZREM');
+    // 3. Accepting again is a no-op: same touch back, no second insert, no second count, tray cleared.
+    const touchId = kv.person('c_dan').touches[0].id;
+    const evalsBefore = kv.log.filter(c => c === 'eval').length;
+    const again = await S.resolveReview(kv, USER, r.item.id, { accept: true, contacts: CONTACTS, tasks: [] });
+    assert.equal(again.accepted, true); assert.equal(again.touch.id, touchId); assert.ok(again.rollup);
+    assert.equal(kv.log.filter(c => c === 'eval').length, evalsBefore, 'the repeated accept writes nothing');
+    assert.equal(kv.person('c_dan').touches.length, 1);
+    assert.equal(kv.person('c_dan').accepted.glimpse, 1);
+    assert.equal(await S.reviewCount(kv, USER), 0);
+    // 4. The same holds for aliasOf: the ref lands in the alias's seen and a re-accept finds the touch there.
+    const r2 = await S.recordSignal(kv, { userId: USER, contactId: 'c_dan', at: daysAgo(0), channel: 'chat', about: 'y', source: 'glimpse', sourceRef: 'g:2' });
+    const aliased = await S.resolveReview(kv, USER, r2.item.id, { accept: true, aliasOf: 'c_ayan', contacts: CONTACTS, tasks: [] });
+    assert.ok(kv.person('c_ayan').seen.includes('g:2'));
+    await kv.zadd(S.reviewKey(USER), { score: Date.parse(r2.item.at), member: JSON.stringify(r2.item) });   // as if the ZREM had failed
+    const aliasedAgain = await S.resolveReview(kv, USER, r2.item.id, { accept: true, aliasOf: 'c_ayan', contacts: CONTACTS, tasks: [] });
+    assert.equal(aliasedAgain.touch.id, aliased.touch.id);
+    assert.equal(kv.person('c_ayan').touches.length, 1);
+    assert.equal(await S.reviewCount(kv, USER), 0);
+  });
+
+  test('a failed addReview leaves the signal retryable: the sourceRef joins seen only after the tray write', async () => {
+    const kv = await seeded();
+    const realZadd = kv.zadd.bind(kv);
+    kv.zadd = async () => { throw new Error('zadd down'); };
+    await assert.rejects(S.recordSignal(kv, { userId: USER, contactId: 'c_dan', at: daysAgo(0), channel: 'chat', about: 'x', source: 'glimpse', sourceRef: 'g:x' }), /zadd down/);
+    kv.zadd = realZadd;
+    assert.ok(!kv.person('c_dan').seen.includes('g:x'), 'not marked seen when the tray write failed');
+    assert.equal(await S.reviewCount(kv, USER), 0);
+    const retry = await S.recordSignal(kv, { userId: USER, contactId: 'c_dan', at: daysAgo(0), channel: 'chat', about: 'x', source: 'glimpse', sourceRef: 'g:x' });
+    assert.equal(retry.outcome, 'review');
+    assert.equal(await S.reviewCount(kv, USER), 1);
+    assert.ok(kv.person('c_dan').seen.includes('g:x'), 'marked seen once the item is stored');
+    const dup = await S.recordSignal(kv, { userId: USER, contactId: 'c_dan', at: daysAgo(0), channel: 'chat', about: 'x', source: 'glimpse', sourceRef: 'g:x' });
+    assert.deepEqual([dup.outcome, dup.reason], ['skipped', 'duplicate']);
+    assert.equal(await S.reviewCount(kv, USER), 1, 'still one tray item');
   });
 
   test('review tray is trimmed to 50 oldest-first', async () => {
@@ -390,6 +471,23 @@ describe('routes', () => {
     let res = await call(h.touches, { method: 'POST', query: { contactId: 'c_dan' }, body: { channel: 'call', about: 'Pricing', at: daysAgo(1) } });
     assert.equal(res.statusCode, 201); assert.equal(res.body.touch.source, 'manual'); assert.equal(res.body.rollup.lastTouchAbout, 'Pricing'); assert.equal(res.body.rollup.owed, 1);
     const touchId = res.body.touch.id;
+    // clientId: the same id again is a 200 with the existing touch; a different id inserts; bad ids are 400.
+    res = await call(h.touches, { method: 'POST', query: { contactId: 'c_dan' }, body: { channel: 'note', about: 'From the watch', clientId: 'w-1' } });
+    assert.equal(res.statusCode, 201); assert.equal(res.body.touch.clientId, 'w-1');
+    const watchTouchId = res.body.touch.id;
+    res = await call(h.touches, { method: 'POST', query: { contactId: 'c_dan' }, body: { channel: 'note', about: 'From the watch', clientId: 'w-1' } });
+    assert.equal(res.statusCode, 200); assert.equal(res.body.touch.id, watchTouchId); assert.ok(res.body.rollup);
+    assert.equal((await call(h.touches, { method: 'GET', query: { contactId: 'c_dan' } })).body.touches.length, 2, 'one touch per clientId');
+    res = await call(h.touches, { method: 'POST', query: { contactId: 'c_dan' }, body: { channel: 'note', about: 'Again', clientId: 'w-2' } });
+    assert.equal(res.statusCode, 201);
+    assert.equal((await call(h.touches, { method: 'GET', query: { contactId: 'c_dan' } })).body.touches.length, 3);
+    res = await call(h.touches, { method: 'POST', query: { contactId: 'c_dan' }, body: { channel: 'note', clientId: 'x'.repeat(65) } });
+    assert.equal(res.statusCode, 400); assert.equal(res.body.code, 'bad_client_id');
+    res = await call(h.touches, { method: 'POST', query: { contactId: 'c_dan' }, body: { channel: 'note', clientId: { nope: true } } });
+    assert.equal(res.statusCode, 400); assert.equal(res.body.code, 'bad_client_id');
+    for (const id of [watchTouchId, (await call(h.touches, { method: 'GET', query: { contactId: 'c_dan' } })).body.touches.find(t => t.clientId === 'w-2').id]) {
+      await call(h.touchId, { method: 'DELETE', query: { contactId: 'c_dan', touchId: id } });
+    }
     assert.equal((await call(h.touches, { method: 'POST', query: { contactId: 'c_dan' }, body: { channel: 'fax' } })).statusCode, 400);
     assert.equal((await call(h.touches, { method: 'POST', query: { contactId: 'c_al' }, body: { channel: 'call' } })).statusCode, 404);
     assert.equal((await call(h.touches, { method: 'GET', query: { contactId: 'c_dan', limit: '5' } })).body.touches.length, 1);

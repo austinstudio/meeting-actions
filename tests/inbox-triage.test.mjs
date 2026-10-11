@@ -480,8 +480,12 @@ describe('GET /api/capture/board', () => {
 
 describe('GET /api/capture/context', () => {
   test('includes triage stats alongside the existing fields', async () => {
+    // The route uses the real clock, so the clear sits two days back at 03:30Z: inside the 30-day window on any
+    // date, and late the previous evening in Chicago (22:30 CDT / 21:30 CST) so the two zones bucket it differently.
+    const dayUTC = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
+    const dayBefore = new Date(Date.parse(dayUTC) - 86_400_000).toISOString().slice(0, 10);
     const kv = new MemoryKV().seed('columns', []).seed('tasks', [
-      task('a', { status: 'todo', tags: ['watch', 'client'], activity: [clear('2026-09-08T03:30:00Z')] }),
+      task('a', { status: 'todo', tags: ['watch', 'client'], activity: [clear(`${dayUTC}T03:30:00Z`)] }),
       task('b'),
     ]);
     const routes = await routeHarness(kv);
@@ -493,8 +497,8 @@ describe('GET /api/capture/context', () => {
     assert.ok(res.body.tags.includes('watch'));
     assert.deepEqual(res.body.columns[0], { id: 'uncategorized', label: 'Uncategorized' });
     assert.equal(res.body.triage.cleared30Days, 1);
-    assert.deepEqual(res.body.triage.clearedByDay, { '2026-09-07': 1 });   // 22:30 CDT the evening before
-    assert.deepEqual((await routes.context({ tz: 'UTC' })).body.triage.clearedByDay, { '2026-09-08': 1 });
+    assert.deepEqual(res.body.triage.clearedByDay, { [dayBefore]: 1 });   // the evening before in Chicago
+    assert.deepEqual((await routes.context({ tz: 'UTC' })).body.triage.clearedByDay, { [dayUTC]: 1 });
     assert.equal((await routes.context({}, null)).statusCode, 401);
   });
 });
