@@ -1,6 +1,11 @@
 // pages/api/applaud-webhook.js
+// Contract: docs/applaud-webhook-contract.md (events, fields, responses).
+//
 // Receives transcript_ready webhooks from the owner's local Applaud instance and
 // extracts action items with Gemini (lib/extract.js) — same pipeline as inbound-email.js.
+// PRD-15 (Oct 2026): the payload may carry Teams `participants` + `meeting_source`, which are stored on the
+// meeting in place of Gemini's guessed list; a later `transcript_updated` event swaps the stored transcript and
+// participants of the existing meeting (matched on plaudRecordingId) without re-running extraction.
 //
 // Auth: HMAC-SHA256 on the raw request body via X-Applaud-Signature header.
 // Set APPLAUD_WEBHOOK_SECRET in Vercel to the same value you set in
@@ -16,9 +21,11 @@
 // transcript 500'd with "meeting is not defined". It now lives in lib/extract.js + lib/applaud-ingest.mjs.
 
 import crypto from 'node:crypto';
-import { addMeetingWithTasks, findMatchingMeeting, getMeetings } from '../../lib/meeting-store';
+import { kv } from '@vercel/kv';
+import { addMeetingWithTasks, findMatchingMeeting, getMeetings, saveTranscript, updateMeetings } from '../../lib/meeting-store';
 import { extractWithGemini, getKnownPeople, buildTaskRecords } from '../../lib/extract';
-import { applaudMeetingDate, applaudMeetingRecord, findApplaudDuplicate } from '../../lib/applaud-ingest.mjs';
+import { applaudMeetingDate, applaudMeetingRecord, applaudTranscriptUpdate, findApplaudDuplicate } from '../../lib/applaud-ingest.mjs';
+import { recordMeetingSignals } from '../../lib/relationships-store.mjs';
 import { withIngestAlert, notifyIngestFailure } from '../../lib/alerts';
 
 export const config = {
@@ -67,7 +74,11 @@ async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
-  const { event, recording, content } = req.body || {};
+  const { event, recording, content, participants, meeting_source: meetingSource } = req.body || {};
+
+  // transcript_updated: a Teams drop file arrived after the transcript_ready send (PRD-15 R17).
+  // Same signature; refreshes the stored transcript + participants only. Never extracts or creates tasks.
+  if (event === 'transcript_updated') return handleTranscriptUpdated(req, res, { recording, content, participants, meetingSource });
 
   // Only process transcript_ready events — audio_ready has no transcript yet
   if (event !== 'transcript_ready') return skipped(res, `event=${event}`);
@@ -138,7 +149,7 @@ async function handler(req, res) {
     return skipped(res, 'duplicate recording (raced)', { meeting: { id: raced.id, title: raced.title } });
   }
 
-  const meeting = applaudMeetingRecord({ userId, title, extracted, transcriptText, meetingDate, plaudRecordingId, startTimeMs, durationMs });
+  const meeting = applaudMeetingRecord({ userId, title, extracted, transcriptText, meetingDate, plaudRecordingId, startTimeMs, durationMs, participants, meetingSource });
   const newTasks = buildTaskRecords(extracted?.tasks, { userId, meetingId: meeting.id, sourceLabel, createdAt: meeting.processedAt });
 
   // Transcript is stored in its own key; metadata + tasks are appended to the arrays.
@@ -150,6 +161,50 @@ async function handler(req, res) {
     meeting: { id: meeting.id, title: meeting.title },
     taskCount: newTasks.length,
   });
+}
+
+/**
+ * transcript_updated: find the meeting by plaudRecordingId for the configured user, replace its transcript
+ * (own KV key) and participants/meetingSource under the meetings CAS, then let Relationships turn any new
+ * participants into touches (sourceRef `meeting:<id>` makes repeats no-ops). Idempotent.
+ */
+async function handleTranscriptUpdated(req, res, { recording, content, participants, meetingSource }) {
+  const userId = (process.env.INBOUND_EMAIL_USER_ID || '').trim();
+  if (!userId) {
+    console.error('INBOUND_EMAIL_USER_ID env var not set');
+    return res.status(500).json({ error: 'Server not configured' });
+  }
+  const plaudRecordingId = recording?.id || null;
+  if (!plaudRecordingId) return res.status(400).json({ error: 'missing_recording_id' });
+
+  const isTarget = m => m && m.plaudRecordingId === plaudRecordingId && m.userId === userId;
+  const existing = (await getMeetings()).find(isTarget);
+  if (!existing) {
+    console.log(`Applaud webhook: transcript_updated for unknown recording ${plaudRecordingId}`);
+    return res.status(404).json({ error: 'unknown_recording' });
+  }
+
+  const transcriptText = typeof content?.transcript_text === 'string' ? content.transcript_text.trim() : '';
+  // Transcript first (small, independent key), then the metadata under compare-and-set — same order as
+  // addMeetingWithTasks. saveTranscript ignores empty text, so a payload without one keeps the stored transcript.
+  await saveTranscript(existing.id, transcriptText);
+
+  let updated = null;
+  await updateMeetings(kv, meetings => {
+    const idx = meetings.findIndex(isTarget);
+    if (idx < 0) return null;
+    updated = applaudTranscriptUpdate(meetings[idx], { transcriptText, participants, meetingSource });
+    const next = meetings.slice();
+    next[idx] = updated;
+    return { meetings: next };
+  });
+  if (!updated) return res.status(404).json({ error: 'unknown_recording' });
+
+  // Relationships (PRD-14): newly named roster people get a meeting touch. Never fails the update.
+  try { await recordMeetingSignals(kv, updated); } catch (e) { console.error('relationships meeting signal failed:', e?.message || e); }
+
+  console.log(`Applaud webhook: transcript_updated refreshed "${updated.title}" (${updated.id}, ${transcriptText.length} chars, ${updated.participants?.length || 0} participants)`);
+  return res.status(200).json({ updated: true, meeting: { id: updated.id, title: updated.title } });
 }
 
 export default withIngestAlert('applaud-webhook', handler);
