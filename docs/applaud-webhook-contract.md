@@ -47,11 +47,13 @@ Sent when a Teams drop file arrives after `transcript_ready` already went out. S
 - replaces `participants` (when the payload names any) and sets `meetingSource`;
 - stamps `transcriptUpdatedAt`.
 
-It never re-runs extraction, never creates or edits tasks, and never changes title, summary, date or duration. Afterwards `recordMeetingSignals` runs best-effort so newly named roster people get a meeting touch; `sourceRef: meeting:<id>` makes repeats no-ops, so resending the event is idempotent.
+It never re-runs extraction, never creates tasks, and never changes title, summary, date or duration. Afterwards `recordMeetingSignals` runs best-effort so newly named roster people get a meeting touch; `sourceRef: meeting:<id>` makes repeats no-ops, so resending the event is idempotent.
+
+**Re-attribution (Nov 2026).** `transcript_ready` usually fires before the owner opens the Teams Recap, so the first extraction assigned owners from "Speaker B"-style labels. When the new transcript names speakers the stored one did not (`hasNamedSpeakerGain`, speaker labels parsed from Applaud's `[mm:ss] Name:` lines), the server makes **one** Gemini call (`reattributeWithGemini`) with the meeting's remaining tasks and the named transcript, and updates `owner` / `person` on those tasks in place under the tasks compare-and-set. Rules: only this meeting's tasks that are not archived, not done and whose owner/person the owner never edited on the website (activity `update` on `owner`/`person` by anyone other than `Applaud (Teams names)`); only to names in the stored participants (either name order), the named speakers, `Me` or `Unassigned`; every change gets an `update` activity entry with `user: "Applaud (Teams names)"`. Task ids, text, dates and status never change. Hard cap `REATTRIBUTE_DAILY_CAP` (40) Gemini calls per UTC day via `applaud:reattribute:<date>` (`INCR` + 2-day expiry). Any failure logs and leaves the tasks as they were; the transcript/participant update has already succeeded, so the response stays 200 and Applaud does not retry. A resend of an already-named transcript is not a gain and costs nothing. `APPLAUD_OWNER_NAME` (default `Corey`) tells the model which transcript speaker is "Me".
 
 Responses:
 
-- `200 { updated: true, meeting: { id, title } }`
+- `200 { updated: true, meeting: { id, title }, reattributed?: n }` — `reattributed` is present only when the named-speaker gain triggered a pass (0 when nothing changed, the cap was hit, or the pass failed).
 - `404 { error: "unknown_recording" }` — no meeting with that recording id (Applaud should send `transcript_ready` instead, or retry later).
 - `400 { error: "missing_recording_id" }`
 - `401` / `500` as above.

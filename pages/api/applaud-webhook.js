@@ -22,9 +22,10 @@
 
 import crypto from 'node:crypto';
 import { kv } from '@vercel/kv';
-import { addMeetingWithTasks, findMatchingMeeting, getMeetings, saveTranscript, updateMeetings } from '../../lib/meeting-store';
-import { extractWithGemini, getKnownPeople, buildTaskRecords } from '../../lib/extract';
-import { applaudMeetingDate, applaudMeetingRecord, applaudTranscriptUpdate, findApplaudDuplicate } from '../../lib/applaud-ingest.mjs';
+import { addMeetingWithTasks, findMatchingMeeting, getMeetings, getTasks, getTranscript, saveTranscript, updateMeetings } from '../../lib/meeting-store';
+import { updateTasks } from '../../lib/task-store.mjs';
+import { extractWithGemini, getKnownPeople, buildTaskRecords, reattributeWithGemini } from '../../lib/extract';
+import { applaudMeetingDate, applaudMeetingRecord, applaudTranscriptUpdate, findApplaudDuplicate, hasNamedSpeakerGain, reattributionCandidates, allowedAttributionNames, applyReattribution } from '../../lib/applaud-ingest.mjs';
 import { recordMeetingSignals } from '../../lib/relationships-store.mjs';
 import { withIngestAlert, notifyIngestFailure } from '../../lib/alerts';
 
@@ -77,7 +78,8 @@ async function handler(req, res) {
   const { event, recording, content, participants, meeting_source: meetingSource } = req.body || {};
 
   // transcript_updated: a Teams drop file arrived after the transcript_ready send (PRD-15 R17).
-  // Same signature; refreshes the stored transcript + participants only. Never extracts or creates tasks.
+  // Same signature; refreshes the stored transcript + participants, then re-attributes the existing
+  // tasks' owners when the new transcript names speakers the old one did not. Never creates tasks.
   if (event === 'transcript_updated') return handleTranscriptUpdated(req, res, { recording, content, participants, meetingSource });
 
   // Only process transcript_ready events — audio_ready has no transcript yet
@@ -185,6 +187,12 @@ async function handleTranscriptUpdated(req, res, { recording, content, participa
   }
 
   const transcriptText = typeof content?.transcript_text === 'string' ? content.transcript_text.trim() : '';
+  // Read the stored transcript before replacing it: the re-attribution below only runs when the new text
+  // names speakers the old one did not (so a resend of the same file never costs a Gemini call).
+  let previousText = null;
+  if (transcriptText) {
+    try { previousText = await getTranscript(existing.id); } catch (e) { console.error('Applaud webhook: transcript read failed:', e?.message || e); }
+  }
   // Transcript first (small, independent key), then the metadata under compare-and-set — same order as
   // addMeetingWithTasks. saveTranscript ignores empty text, so a payload without one keeps the stored transcript.
   await saveTranscript(existing.id, transcriptText);
@@ -204,7 +212,52 @@ async function handleTranscriptUpdated(req, res, { recording, content, participa
   try { await recordMeetingSignals(kv, updated); } catch (e) { console.error('relationships meeting signal failed:', e?.message || e); }
 
   console.log(`Applaud webhook: transcript_updated refreshed "${updated.title}" (${updated.id}, ${transcriptText.length} chars, ${updated.participants?.length || 0} participants)`);
-  return res.status(200).json({ updated: true, meeting: { id: updated.id, title: updated.title } });
+
+  const body = { updated: true, meeting: { id: updated.id, title: updated.title } };
+  if (transcriptText && hasNamedSpeakerGain(previousText, transcriptText)) {
+    body.reattributed = await reattributeMeetingTasks(updated, transcriptText);
+  }
+  return res.status(200).json(body);
+}
+
+// Hard cap on re-attribution Gemini calls per UTC day (metered service). A resend storm or a bug upstream
+// can at most spend this many calls; the counter key expires on its own.
+const REATTRIBUTE_DAILY_CAP = 40;
+const reattributeCapKey = (now = new Date()) => `applaud:reattribute:${now.toISOString().slice(0, 10)}`;
+
+/**
+ * Re-attribute this meeting's tasks against the named transcript. Best-effort: any failure logs and
+ * returns 0 — the transcript/participant update above already succeeded and must not be retried for this.
+ * Returns the number of tasks whose owner or person changed.
+ */
+async function reattributeMeetingTasks(meeting, transcriptText) {
+  try {
+    const candidates = reattributionCandidates(await getTasks(), meeting.id);
+    if (candidates.length === 0) return 0;
+
+    const key = reattributeCapKey();
+    const used = await kv.incr(key);
+    if (used === 1) await kv.expire(key, 2 * 24 * 60 * 60);
+    if (used > REATTRIBUTE_DAILY_CAP) {
+      console.error(`Applaud webhook: re-attribution daily cap (${REATTRIBUTE_DAILY_CAP}) reached; skipping "${meeting.title}"`);
+      return 0;
+    }
+
+    const participants = Array.isArray(meeting.participants) ? meeting.participants : [];
+    const assignments = await reattributeWithGemini(transcriptText, candidates, { participants, ownerName: process.env.APPLAUD_OWNER_NAME || 'Corey' });
+    const allowed = allowedAttributionNames(participants, transcriptText);
+    let changed = 0;
+    await updateTasks(kv, tasks => {
+      const outcome = applyReattribution(tasks, { meetingId: meeting.id, assignments, allowed });
+      changed = outcome.changed;
+      return changed ? { tasks: outcome.tasks } : null;
+    });
+    console.log(`Applaud webhook: re-attributed ${changed}/${candidates.length} tasks of "${meeting.title}" (${meeting.id})`);
+    return changed;
+  } catch (e) {
+    console.error('Applaud webhook: re-attribution failed:', e?.message || e);
+    return 0;
+  }
 }
 
 export default withIngestAlert('applaud-webhook', handler);

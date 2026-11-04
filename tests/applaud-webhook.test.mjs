@@ -23,6 +23,8 @@ class MemoryKV {
   async mget(...keys) { return keys.map(k => (this.values.has(k) ? JSON.parse(this.values.get(k)) : null)); }
   async set(k, v) { this.values.set(k, JSON.stringify(v)); }
   async del(k) { this.values.delete(k); this.zsets.delete(k); }
+  async incr(k) { const n = (this.values.has(k) ? Number(JSON.parse(this.values.get(k))) : 0) + 1; this.values.set(k, JSON.stringify(n)); return n; }
+  async expire(k, seconds) { this.expires = { ...(this.expires || {}), [k]: seconds }; return 1; }
   async eval(script, keys, args) {
     assert.ok(script === CAS_SCRIPT || script === taskStore.TASKS_CAS_SCRIPT, 'only the CAS script is expected');
     const [key, versionKey] = keys, [json, expected] = args;
@@ -49,9 +51,10 @@ const GEMINI_GUESS = ['Someone Gemini Guessed', 'Nikesh'];
 const EXTRACTED = { meeting: { title: 'Q4 Planning', participants: GEMINI_GUESS, summary: 'Budget and hiring.' }, tasks: [{ task: 'Send the budget deck', owner: 'Me' }] };
 
 /** Load the route (and lib/meeting-store.js, which is ESM-syntax .js) through the vm linker with explicit deps. */
-async function routeHarness({ env = {}, extracted = EXTRACTED } = {}) {
+async function routeHarness({ env = {}, extracted = EXTRACTED, reattributed = [] } = {}) {
   const kv = new MemoryKV();
   const geminiCalls = [];
+  const reattributeCalls = [];
   const alerts = [];
   const context = createContext({ process: { env: { INBOUND_EMAIL_USER_ID: USER, APPLAUD_WEBHOOK_SECRET: SECRET, ...env } }, console: { log() {}, error() {} }, Buffer, setTimeout });
   const dependencies = {
@@ -64,6 +67,7 @@ async function routeHarness({ env = {}, extracted = EXTRACTED } = {}) {
     extract: {
       getKnownPeople: async () => [],
       extractWithGemini: async (text, opts) => { geminiCalls.push({ chars: text.length, people: opts?.people }); return { extracted }; },
+      reattributeWithGemini: async (text, tasks, opts) => { reattributeCalls.push({ chars: text.length, ids: tasks.map(t => t.id), participants: opts?.participants }); if (reattributed instanceof Error) throw reattributed; return typeof reattributed === 'function' ? reattributed(tasks) : reattributed; },
       buildTaskRecords: (tasks, { userId, meetingId, sourceLabel, createdAt }) => (tasks || []).map((t, i) => ({ id: `t_${meetingId}_${i}`, userId, meetingId, task: t.task, owner: t.owner, source: sourceLabel, createdAt, status: 'uncategorized' })),
     },
     alerts: { withIngestAlert: (_source, handler) => handler, notifyIngestFailure: async (...args) => { alerts.push(args); } },
@@ -95,10 +99,11 @@ async function routeHarness({ env = {}, extracted = EXTRACTED } = {}) {
     await handler(req, res);
     return res;
   };
-  return { kv, post, geminiCalls, alerts };
+  return { kv, post, geminiCalls, reattributeCalls, alerts };
 }
 
 const TRANSCRIPT = 'Speaker 1: Let us walk through the Q4 budget and the two open hires. Speaker 2: Agreed, and I will send the deck to finance after this call so they can review the numbers by Friday.';
+const NAMED = '[00:01] Corey: Let us walk through the Q4 budget and the two open hires.\n\n[00:20] Nikesh Kumar Chhabria: Agreed, and I will send the deck to finance after this call so they can review the numbers by Friday.';
 const MERGED = `${TRANSCRIPT} Speaker 3: One more thing, the Teams transcript caught the part about the vendor renewal that the recorder missed entirely.`;
 const RECORDING = { id: 'rec-42', filename: '10-14 Q4 Planning', start_time_ms: Date.parse('2026-10-14T15:00:00Z'), end_time_ms: Date.parse('2026-10-14T15:45:00Z'), duration_ms: 45 * 60_000 };
 const TEAMS = ['Chhabria, Nikesh Kumar', 'Okafor, Dan', ' Chhabria, Nikesh Kumar ', 'okafor, dan'];
@@ -247,4 +252,48 @@ test('a roster person named "Last, First" gets exactly one meeting touch across 
   assert.equal(touches[0].sourceRef, `meeting:${kv2.meetings()[0].id}`);
   await post2(updated());
   assert.equal(kv2.person('c_nikesh').touches.length, 1);
+});
+
+test('transcript_updated with newly named speakers re-attributes the existing tasks in place (one Gemini call, capped per day)', async () => {
+  const { kv, post, geminiCalls, reattributeCalls } = await routeHarness({ reattributed: tasks => [{ id: tasks[0].id, owner: 'Nikesh Kumar Chhabria', person: null }] });
+  await post(ready());
+  const [meeting] = kv.meetings();
+  const taskId = kv.tasks()[0].id;
+  assert.equal(kv.tasks()[0].owner, 'Me');
+
+  const res = await post(updated({ content: { transcript_text: NAMED } }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.updated, true);
+  assert.equal(res.body.reattributed, 1);
+  assert.equal(geminiCalls.length, 1, 'extraction is not re-run');
+  assert.equal(reattributeCalls.length, 1);
+  assert.deepEqual(reattributeCalls[0].ids, [taskId]);
+  assert.deepEqual(reattributeCalls[0].participants, ['Chhabria, Nikesh Kumar', 'Okafor, Dan'], 'the stored (Teams) participants go to the model');
+  const [task] = kv.tasks();
+  assert.equal(kv.tasks().length, 1, 'no new tasks');
+  assert.equal(task.id, taskId);
+  assert.equal(task.owner, 'Nikesh Kumar Chhabria');
+  assert.equal(task.meetingId, meeting.id);
+  assert.equal(await kv.get(`applaud:reattribute:${new Date().toISOString().slice(0, 10)}`), 1, 'daily counter incremented');
+
+  // A resend of the same named transcript is not a gain: no second model call, no change.
+  const again = await post(updated({ content: { transcript_text: NAMED } }));
+  assert.equal(again.body.reattributed, undefined);
+  assert.equal(reattributeCalls.length, 1);
+});
+
+test('transcript_updated: a re-attribution failure or an unknown name leaves tasks alone and still returns 200', async () => {
+  const failing = await routeHarness({ reattributed: new Error('Gemini down') });
+  await failing.post(ready());
+  const res = await failing.post(updated({ content: { transcript_text: NAMED } }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.reattributed, 0);
+  assert.equal(failing.kv.tasks()[0].owner, 'Me');
+  assert.equal(failing.kv.transcript(failing.kv.meetings()[0].id), NAMED, 'the transcript update itself still landed');
+
+  const invented = await routeHarness({ reattributed: tasks => [{ id: tasks[0].id, owner: 'Nobody Known' }] });
+  await invented.post(ready());
+  const res2 = await invented.post(updated({ content: { transcript_text: NAMED } }));
+  assert.equal(res2.body.reattributed, 0);
+  assert.equal(invented.kv.tasks()[0].owner, 'Me');
 });
