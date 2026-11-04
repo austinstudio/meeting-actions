@@ -280,6 +280,11 @@ test('transcript_updated with newly named speakers re-attributes the existing ta
   const again = await post(updated({ content: { transcript_text: NAMED } }));
   assert.equal(again.body.reattributed, undefined);
   assert.equal(reattributeCalls.length, 1);
+
+  // ...unless the sender asks for it explicitly (catch-up for meetings named before this feature).
+  const forced = await post(updated({ content: { transcript_text: NAMED }, reattribute: true }));
+  assert.equal(forced.body.reattributed, 0, 'owner already correct, nothing to change');
+  assert.equal(reattributeCalls.length, 2);
 });
 
 test('transcript_updated: a re-attribution failure or an unknown name leaves tasks alone and still returns 200', async () => {

@@ -80,7 +80,7 @@ async function handler(req, res) {
   // transcript_updated: a Teams drop file arrived after the transcript_ready send (PRD-15 R17).
   // Same signature; refreshes the stored transcript + participants, then re-attributes the existing
   // tasks' owners when the new transcript names speakers the old one did not. Never creates tasks.
-  if (event === 'transcript_updated') return handleTranscriptUpdated(req, res, { recording, content, participants, meetingSource });
+  if (event === 'transcript_updated') return handleTranscriptUpdated(req, res, { recording, content, participants, meetingSource, forceReattribute: req.body?.reattribute === true });
 
   // Only process transcript_ready events — audio_ready has no transcript yet
   if (event !== 'transcript_ready') return skipped(res, `event=${event}`);
@@ -170,7 +170,7 @@ async function handler(req, res) {
  * (own KV key) and participants/meetingSource under the meetings CAS, then let Relationships turn any new
  * participants into touches (sourceRef `meeting:<id>` makes repeats no-ops). Idempotent.
  */
-async function handleTranscriptUpdated(req, res, { recording, content, participants, meetingSource }) {
+async function handleTranscriptUpdated(req, res, { recording, content, participants, meetingSource, forceReattribute = false }) {
   const userId = (process.env.INBOUND_EMAIL_USER_ID || '').trim();
   if (!userId) {
     console.error('INBOUND_EMAIL_USER_ID env var not set');
@@ -214,7 +214,9 @@ async function handleTranscriptUpdated(req, res, { recording, content, participa
   console.log(`Applaud webhook: transcript_updated refreshed "${updated.title}" (${updated.id}, ${transcriptText.length} chars, ${updated.participants?.length || 0} participants)`);
 
   const body = { updated: true, meeting: { id: updated.id, title: updated.title } };
-  if (transcriptText && hasNamedSpeakerGain(previousText, transcriptText)) {
+  // `reattribute: true` in the payload (Applaud's resend-webhook route) runs the pass even when the stored
+  // transcript already had these names — for meetings whose names landed before this feature existed.
+  if (transcriptText && (forceReattribute || hasNamedSpeakerGain(previousText, transcriptText))) {
     body.reattributed = await reattributeMeetingTasks(updated, transcriptText);
   }
   return res.status(200).json(body);
