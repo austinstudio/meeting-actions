@@ -193,8 +193,9 @@ test('transcript_updated: 404 unknown_recording when no meeting has that plaudRe
   assert.equal(unsigned.statusCode, 401);
 
   await post(ready());
-  const otherRecording = await post(updated({ recording: { ...RECORDING, id: 'rec-99' } }));
-  assert.equal(otherRecording.statusCode, 404, 'a different recording id does not match by start time');
+  // A different id at a different start time is a different recording (same id-or-start-time rule as duplicates).
+  const otherRecording = await post(updated({ recording: { ...RECORDING, id: 'rec-99', start_time_ms: RECORDING.start_time_ms + 3_600_000 } }));
+  assert.equal(otherRecording.statusCode, 404, 'a different recording id at a different start time is unknown');
   assert.deepEqual(kv.meetings()[0].participants, GEMINI_GUESS, 'the existing meeting is untouched');
 });
 
@@ -302,3 +303,22 @@ test('transcript_updated: a re-attribution failure or an unknown name leaves tas
   assert.equal(res2.body.reattributed, 0);
   assert.equal(invented.kv.tasks()[0].owner, 'Me');
 });
+
+test('transcript_updated finds the meeting by start time when Applaud re-identified the recording (local → cloud id), and adopts the new id', async () => {
+  const { kv, post } = await routeHarness();
+  await post(ready({ recording: { ...RECORDING, id: 'local-1793806275756' } }));
+  const [before] = kv.meetings();
+  assert.equal(before.plaudRecordingId, 'local-1793806275756');
+
+  const res = await post(updated({ recording: { ...RECORDING, id: 'cloud-abc123' } }));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.meeting.id, before.id);
+  const [after] = kv.meetings();
+  assert.equal(kv.meetings().length, 1);
+  assert.equal(after.plaudRecordingId, 'cloud-abc123', 'stored id moves to the cloud id');
+  assert.deepEqual(after.participants, ['Chhabria, Nikesh Kumar', 'Okafor, Dan']);
+
+  const miss = await post(updated({ recording: { ...RECORDING, id: 'cloud-other', start_time_ms: RECORDING.start_time_ms + 60_000 } }));
+  assert.equal(miss.statusCode, 404, 'a different id with a different start time is still unknown');
+});
+

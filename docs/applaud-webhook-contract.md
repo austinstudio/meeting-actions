@@ -41,7 +41,7 @@ Responses:
 
 ## `transcript_updated`
 
-Sent when a Teams drop file arrives after `transcript_ready` already went out. Same signature. The server finds the meeting with `plaudRecordingId === recording.id` for the configured user, then under the meetings compare-and-set:
+Sent when a Teams drop file arrives after `transcript_ready` already went out. Same signature. The server finds the meeting with `plaudRecordingId === recording.id` for the configured user, falling back to the same `plaudStartTimeMs === recording.start_time_ms` match `transcript_ready` uses for duplicates (Applaud re-identifies a local-cache import when its Plaud cloud copy arrives, `local-<ms>` → cloud id; the stored `plaudRecordingId` is moved to the new id). Then under the meetings compare-and-set:
 
 - replaces the stored transcript and recomputes `transcriptLength` / `hasTranscript` (an empty `transcript_text` leaves the stored transcript alone);
 - replaces `participants` (when the payload names any) and sets `meetingSource`;

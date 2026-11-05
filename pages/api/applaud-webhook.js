@@ -179,12 +179,20 @@ async function handleTranscriptUpdated(req, res, { recording, content, participa
   const plaudRecordingId = recording?.id || null;
   if (!plaudRecordingId) return res.status(400).json({ error: 'missing_recording_id' });
 
-  const isTarget = m => m && m.plaudRecordingId === plaudRecordingId && m.userId === userId;
-  const existing = (await getMeetings()).find(isTarget);
+  // Match by recording id, else by start time: Applaud re-identifies a recording when the Plaud cloud copy of a
+  // local-cache import arrives (local-<ms> → cloud id), and the meeting here still carries the old id. Same rule as
+  // findApplaudDuplicate on transcript_ready; the stored id is moved to the new one below.
+  const startTimeMs = Number(recording?.start_time_ms);
+  const matchTarget = meetings => {
+    const hit = findApplaudDuplicate(meetings, { plaudRecordingId, startTimeMs });
+    return hit && hit.userId === userId ? hit : null;
+  };
+  const existing = matchTarget(await getMeetings());
   if (!existing) {
     console.log(`Applaud webhook: transcript_updated for unknown recording ${plaudRecordingId}`);
     return res.status(404).json({ error: 'unknown_recording' });
   }
+  const isTarget = m => m && m.id === existing.id && m.userId === userId;
 
   const transcriptText = typeof content?.transcript_text === 'string' ? content.transcript_text.trim() : '';
   // Read the stored transcript before replacing it: the re-attribution below only runs when the new text
@@ -202,6 +210,7 @@ async function handleTranscriptUpdated(req, res, { recording, content, participa
     const idx = meetings.findIndex(isTarget);
     if (idx < 0) return null;
     updated = applaudTranscriptUpdate(meetings[idx], { transcriptText, participants, meetingSource });
+    if (updated.plaudRecordingId !== plaudRecordingId) updated = { ...updated, plaudRecordingId };
     const next = meetings.slice();
     next[idx] = updated;
     return { meetings: next };
